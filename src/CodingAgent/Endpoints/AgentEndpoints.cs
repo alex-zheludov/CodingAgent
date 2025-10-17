@@ -1,0 +1,127 @@
+using CodingAgent.Models;
+using CodingAgent.Services;
+using Microsoft.AspNetCore.Mvc;
+
+namespace CodingAgent.Endpoints;
+
+public class AgentEndpoints : IEndpointDefinition
+{
+    public void DefineEndpoints(WebApplication app)
+    {
+        var group = app.MapGroup("/api")
+            .WithTags("Agent")
+            .WithOpenApi();
+
+        group.MapPost("/execute", ExecuteTaskAsync)
+            .WithName("ExecuteTask")
+            .WithDescription("Submit initial task instruction to the agent");
+
+        group.MapPost("/message", SendMessageAsync)
+            .WithName("SendMessage")
+            .WithDescription("Send follow-up message to the agent");
+
+        group.MapGet("/status", GetStatusAsync)
+            .WithName("GetStatus")
+            .WithDescription("Get current agent status");
+
+        group.MapGet("/conversation", GetConversationAsync)
+            .WithName("GetConversation")
+            .WithDescription("Get conversation history");
+
+        group.MapGet("/health", GetHealthAsync)
+            .WithName("HealthCheck")
+            .WithDescription("Health check endpoint");
+
+        group.MapPost("/stop", StopAgentAsync)
+            .WithName("StopAgent")
+            .WithDescription("Stop/pause the agent");
+    }
+
+    private static async Task<IResult> ExecuteTaskAsync(
+        [FromBody] ExecuteRequest request,
+        [FromServices] ICodingAgent orchestrator,
+        [FromServices] ILogger<AgentEndpoints> logger)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Instruction))
+            {
+                return Results.BadRequest(new { error = "Instruction is required" });
+            }
+
+            await orchestrator.ExecuteInstructionAsync(request.Instruction);
+
+            return Results.Ok(new ExecuteResponse(
+                Success: true,
+                Message: "Task accepted and processing",
+                SessionId: orchestrator.SessionId));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error executing task");
+            return Results.Problem(ex.Message);
+        }
+    }
+
+    private static async Task<IResult> SendMessageAsync(
+        [FromBody] MessageRequest request,
+        [FromServices] ICodingAgent orchestrator,
+        [FromServices] ILogger<AgentEndpoints> logger)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Message))
+            {
+                return Results.BadRequest(new { error = "Message is required" });
+            }
+
+            await orchestrator.SendMessageAsync(request.Message);
+
+            return Results.Ok(new { success = true, message = "Message sent" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error sending message");
+            return Results.Problem(ex.Message);
+        }
+    }
+
+    private static async Task<IResult> GetStatusAsync(
+        [FromServices] ICodingAgent orchestrator)
+    {
+        var status = await orchestrator.GetStatusAsync();
+        return Results.Ok(status);
+    }
+
+    private static async Task<IResult> GetConversationAsync(
+        [FromQuery] int pageSize,
+        [FromQuery] int pageNumber,
+        [FromServices] ISessionStore sessionStore)
+    {
+        pageSize = pageSize <= 0 ? 50 : Math.Min(pageSize, 100);
+        pageNumber = Math.Max(pageNumber, 1);
+
+        var messages = await sessionStore.GetConversationHistoryAsync(pageSize, pageNumber);
+        var totalCount = messages.Count; // Simplified - in production would query total count
+
+        return Results.Ok(new ConversationResponse(
+            Messages: messages,
+            TotalCount: totalCount,
+            PageSize: pageSize,
+            PageNumber: pageNumber));
+    }
+
+    private static async Task<IResult> GetHealthAsync(
+        [FromServices] ICodingAgent orchestrator)
+    {
+        var health = await orchestrator.GetHealthAsync();
+        return Results.Ok(health);
+    }
+
+    private static async Task<IResult> StopAgentAsync(
+        [FromServices] ICodingAgent orchestrator)
+    {
+        await orchestrator.StopAsync();
+        return Results.Ok(new { success = true, message = "Agent stopped" });
+    }
+}

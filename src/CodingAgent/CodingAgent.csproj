@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <UserSecretsId>aspire-CodingAgent-12345678</UserSecretsId>
+        <!-- Exclude workspace directory from compilation -->
+        <DefaultItemExcludes>$(DefaultItemExcludes);workspace\**</DefaultItemExcludes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- ASP.NET Core -->
+        <PackageReference Include="Azure.AI.OpenAI" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+        <PackageReference Include="Polly" />
+        <PackageReference Include="Scalar.AspNetCore" />
+
+        <!-- Semantic Kernel & AI -->
+        <PackageReference Include="Microsoft.SemanticKernel" />
+        <PackageReference Include="Microsoft.SemanticKernel.Connectors.AzureOpenAI" />
+        <PackageReference Include="Microsoft.Extensions.AI" />
+
+        <!-- Database -->
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+
+        <!-- Git -->
+        <PackageReference Include="LibGit2Sharp" />
+
+        <!-- Utilities -->
+        <PackageReference Include="System.CommandLine" />
+
+        <!-- Validation -->
+        <PackageReference Include="FluentValidation" />
+        <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    </ItemGroup>
+
+</Project>
