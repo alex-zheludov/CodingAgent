@@ -2,6 +2,7 @@ using CodingAgent.Configuration;
 using CodingAgent.Configuration.Validators;
 using CodingAgent.Data;
 using CodingAgent.Endpoints;
+using CodingAgent.Extensions;
 using CodingAgent.Plugins;
 using CodingAgent.Services;
 using FluentValidation;
@@ -13,17 +14,18 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add configuration with validation
+
 builder.Services.AddOptions<AzureOpenAISettings>()
     .BindConfiguration(AzureOpenAISettings.SectionName)
-    .ValidateOnStart();
+    .ValidateUsingFluentValidator();
 
 builder.Services.AddOptions<AgentSettings>()
     .BindConfiguration(AgentSettings.SectionName)
-    .ValidateOnStart();
+    .ValidateUsingFluentValidator();
 
 builder.Services.AddOptions<GitSettings>()
     .BindConfiguration(GitSettings.SectionName)
-    .ValidateOnStart();
+    .ValidateUsingFluentValidator();
 
 builder.Services.AddOptions<OrchestratorSettings>()
     .BindConfiguration(OrchestratorSettings.SectionName);
