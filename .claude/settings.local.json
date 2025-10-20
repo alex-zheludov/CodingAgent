@@ -7,7 +7,11 @@
       "Bash(dotnet build)",
       "Bash(dotnet add package:*)",
       "Bash(dotnet build:*)",
-      "Bash(dotnet add:*)"
+      "Bash(dotnet add:*)",
+      "Bash(dir /B)",
+      "Bash(dotnet sln add src/CodingAgent.Core/CodingAgent.Core.csproj)",
+      "Bash(dotnet sln add src/CodingAgent.Api/CodingAgent.Api.csproj)",
+      "Bash(dotnet sln add src/CodingAgent.Terminal/CodingAgent.Terminal.csproj)"
     ],
     "deny": [],
     "ask": []

@@ -1,6 +1,7 @@
 using CodingAgent.Configuration;
 using CodingAgent.Models;
 using CodingAgent.Plugins;
+using CodingAgent.Services;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -8,7 +9,7 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Polly;
 using Polly.Retry;
 
-namespace CodingAgent.Services;
+namespace CodingAgent.Agents;
 
 public interface ICodingAgent
 {
@@ -347,7 +348,7 @@ public class CodingCodingAgent : ICodingAgent
                 if (response == null) continue;
 
                 _logger.LogDebug("Agent Response: {Response}", response.Content);
-                
+
                 // Add assistant response to history
                 _chatHistory.AddAssistantMessage(response.Content ?? "");
 

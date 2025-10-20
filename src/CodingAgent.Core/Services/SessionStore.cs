@@ -74,7 +74,10 @@ public class SessionStore : ISessionStore
 
     public async Task<List<ConversationMessage>> GetConversationHistoryAsync(int pageSize = 50, int pageNumber = 1)
     {
-        var messages = await _dbContext.Conversations
+        // Load all conversations and order on client side (SQLite doesn't support DateTimeOffset in ORDER BY)
+        var allConversations = await _dbContext.Conversations.ToListAsync();
+
+        var messages = allConversations
             .OrderBy(c => c.Timestamp)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
@@ -83,18 +86,21 @@ public class SessionStore : ISessionStore
                 c.Role,
                 c.Content,
                 c.ToolName))
-            .ToListAsync();
+            .ToList();
 
         return messages;
     }
 
     public async Task<List<string>> GetRecentThinkingAsync(int count = 10)
     {
-        var thoughts = await _dbContext.ThinkingLog
+        // Load all thinking entries and order on client side (SQLite doesn't support DateTimeOffset in ORDER BY)
+        var allThoughts = await _dbContext.ThinkingLog.ToListAsync();
+
+        var thoughts = allThoughts
             .OrderByDescending(t => t.Timestamp)
             .Take(count)
             .Select(t => t.Thought)
-            .ToListAsync();
+            .ToList();
 
         thoughts.Reverse(); // Return in chronological order
         return thoughts;

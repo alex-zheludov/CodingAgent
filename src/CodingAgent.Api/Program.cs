@@ -1,3 +1,4 @@
+using CodingAgent.Agents;
 using CodingAgent.Configuration;
 using CodingAgent.Configuration.Validators;
 using CodingAgent.Data;
@@ -67,7 +68,7 @@ builder.Services.AddSingleton(sp =>
 });
 
 // Add orchestrator (depends on plugins and workspace context)
-builder.Services.AddScoped<ICodingAgent, CodingAgent.Services.CodingCodingAgent>();
+builder.Services.AddScoped<ICodingAgent, CodingAgent.Agents.CodingCodingAgent>();
 
 // Add OpenAPI/Swagger
 builder.Services.AddOpenApi();
