@@ -9,20 +9,21 @@
 
 ## 1. Executive Summary
 
-This document outlines the requirements for transforming the current single-agent architecture into a multi-agent orchestration system using Semantic Kernel's Process Framework. The new architecture will introduce specialized agents optimized for different tasks (intent classification, Q&A, planning, execution) with appropriate model selection for each capability.
+This document outlines the requirements for transforming the current single-agent architecture into a multi-agent orchestration system using Semantic Kernel's Process Framework. The new architecture will introduce specialized agents optimized for different tasks (intent classification, research, planning, execution, summarization) with appropriate model selection for each capability.
 
 ### Goals
-- Reduce operational costs by 60-80% through intelligent model selection
+- Reduce operational costs by 70-80% through intelligent model selection
 - Improve response accuracy with specialized agents
-- Enable explicit planning for complex tasks
-- Support large context windows (2M tokens) for codebase Q&A
+- Enable explicit planning with deep reasoning (DeepSeek R1)
+- Support large context windows (128K tokens) for codebase research
 - Maintain backward compatibility with existing plugins and workflows
 
 ### Success Metrics
 - Intent classification accuracy > 95%
 - Average response time reduction by 30%
-- Cost per request reduced by 60%+
+- Cost per request reduced by 70%+
 - Plan execution success rate > 90%
+- Plan quality improved with DeepSeek R1 reasoning
 
 ---
 
@@ -40,10 +41,11 @@ This document outlines the requirements for transforming the current single-agen
 - [src/CodingAgent/Configuration/AzureOpenAISettings.cs](../src/CodingAgent/Configuration/AzureOpenAISettings.cs)
 
 ### 2.2 Target State
-- Orchestration process with 4 specialized agent types
-- Multi-model configuration (GPT-4o-mini, GPT-4o, Gemini 1.5 Pro)
-- Explicit planning phase with structured output
+- Orchestration process with 5 specialized agent types
+- Multi-model configuration (GPT-4o-mini, GPT-4o, DeepSeek R1)
+- Explicit planning phase with deep reasoning and structured output
 - Plan-driven execution with step tracking
+- Automatic summarization of all results before user presentation
 - Event-driven routing using Semantic Kernel Process Framework
 
 ---
@@ -78,7 +80,7 @@ var intentStep = processBuilder.AddStepFromType<IntentClassifierStep>();
 Triggers that move the process between steps.
 
 ```csharp
-intentStep.OnEvent("QuestionDetected").SendEventTo(qaStep);
+intentStep.OnEvent("QuestionDetected").SendEventTo(researchStep);
 intentStep.OnEvent("TaskDetected").SendEventTo(planningStep);
 ```
 
@@ -125,7 +127,7 @@ public class OrchestrationState
   "intent": "QUESTION",
   "confidence": 0.95,
   "reasoning": "User is asking about existing code functionality",
-  "suggestedAgent": "QAAgent"
+  "suggestedAgent": "ResearchAgent"
 }
 ```
 
@@ -158,20 +160,20 @@ public class IntentClassifierStep : KernelProcessStep<OrchestrationState>
 
 ---
 
-### 4.2 Q&A Agent
+### 4.2 Research Agent
 
 **Purpose:** Answer questions about existing codebase with large context window.
 
 **Model Configuration:**
-- **Provider:** Google AI
-- **Model:** gemini-1.5-pro-002
-- **Max Tokens:** 8192 (output)
-- **Context Window:** 2,097,152 tokens (2M)
+- **Provider:** Azure OpenAI
+- **Model:** gpt-4o
+- **Max Tokens:** 16384 (output)
+- **Context Window:** 128,000 tokens (128K)
 - **Temperature:** 0.3
-- **Estimated Cost:** ~$0.01 per request
+- **Estimated Cost:** ~$0.015 per request
 
 **Capabilities:**
-- Load entire repository context (within 2M token limit)
+- Load repository context (within 128K token limit)
 - Understand relationships between files
 - Provide code examples and explanations
 - Reference specific line numbers and file paths
@@ -216,14 +218,14 @@ public class IntentClassifierStep : KernelProcessStep<OrchestrationState>
 
 **Implementation Class:**
 ```csharp
-public class QAAgentStep : KernelProcessStep<OrchestrationState>
+public class ResearchAgentStep : KernelProcessStep<OrchestrationState>
 {
-    private readonly Kernel _geminiKernel;
+    private readonly Kernel _researchKernel;
     private readonly IFileOpsPlugin _fileOps;
     private readonly ICodeNavPlugin _codeNav;
 
     [KernelFunction]
-    public async Task<QAResult> AnswerAsync(KernelProcessStepContext context, OrchestrationState state);
+    public async Task<ResearchResult> AnswerAsync(KernelProcessStepContext context, OrchestrationState state);
 }
 ```
 
@@ -235,18 +237,19 @@ public class QAAgentStep : KernelProcessStep<OrchestrationState>
 
 **Model Configuration:**
 - **Provider:** Azure OpenAI
-- **Model:** gpt-4o
-- **Max Tokens:** 4096
+- **Model:** deepseek-r1
+- **Max Tokens:** 8192
 - **Temperature:** 0.2 (balanced)
 - **Response Format:** JSON (structured output)
-- **Estimated Cost:** ~$0.02 per request
+- **Estimated Cost:** ~$0.008 per request (significantly cheaper than GPT-4o)
 
 **Capabilities:**
-- Decompose complex tasks into sequential steps
-- Identify file dependencies
+- Decompose complex tasks into sequential steps with deep reasoning
+- Identify file dependencies and relationships
 - Determine required tools for each step
-- Estimate execution complexity
-- Validate plan feasibility
+- Estimate execution complexity accurately
+- Validate plan feasibility through logical analysis
+- Show explicit reasoning chain for plan decisions
 
 **Input:**
 ```json
@@ -352,7 +355,137 @@ public class PlanningAgentStep : KernelProcessStep<OrchestrationState>
 
 ---
 
-### 4.4 Execution Agent
+### 4.4 Summary Agent
+
+**Purpose:** Summarize all work performed and present results to the user in a clear, concise format.
+
+**Model Configuration:**
+- **Provider:** Azure OpenAI
+- **Model:** gpt-4o-mini
+- **Max Tokens:** 2048
+- **Temperature:** 0.3
+- **Estimated Cost:** ~$0.0005 per request
+
+**Capabilities:**
+- Synthesize execution results into user-friendly summaries
+- Highlight files created, modified, or deleted
+- Summarize research findings with key insights
+- Identify any errors or warnings
+- Suggest follow-up actions or next steps
+- Generate change descriptions for documentation
+
+**Input (Task Completion):**
+```json
+{
+  "intent": "TASK",
+  "plan": { /* ExecutionPlan */ },
+  "stepResults": [
+    {
+      "stepId": 1,
+      "status": "completed",
+      "outcome": "Read SecurityService.cs and identified validation methods",
+      "filesModified": []
+    },
+    {
+      "stepId": 2,
+      "status": "completed",
+      "outcome": "Created SecurityServiceTests.cs with 12 test methods",
+      "filesModified": ["tests/Services/SecurityServiceTests.cs"]
+    }
+  ],
+  "totalExecutionTime": "45s",
+  "toolsUsed": ["FileOps.ReadFile", "FileOps.WriteFile", "Command.TestDotnet"]
+}
+```
+
+**Input (Research Completion):**
+```json
+{
+  "intent": "QUESTION",
+  "question": "How does SecurityService validate file paths?",
+  "researchResult": {
+    "answer": "The SecurityService validates file paths in the ValidateFilePathAsync method...",
+    "references": [
+      {
+        "file": "src/CodingAgent/Services/SecurityService.cs",
+        "lineStart": 45,
+        "lineEnd": 67
+      }
+    ]
+  }
+}
+```
+
+**Output (Task Summary):**
+```json
+{
+  "summary": "Successfully added comprehensive unit tests for SecurityService file path validation.",
+  "accomplishments": [
+    "Analyzed SecurityService.cs validation logic",
+    "Created SecurityServiceTests.cs with 12 test methods",
+    "All tests passing with 95% code coverage"
+  ],
+  "filesChanged": {
+    "created": ["tests/Services/SecurityServiceTests.cs"],
+    "modified": [],
+    "deleted": []
+  },
+  "metrics": {
+    "executionTime": "45s",
+    "stepsCompleted": 5,
+    "stepsTotal": 5,
+    "successRate": "100%"
+  },
+  "nextSteps": [
+    "Consider adding edge case tests for Unicode characters in paths",
+    "Review test coverage report for any missed scenarios"
+  ]
+}
+```
+
+**Output (Research Summary):**
+```json
+{
+  "summary": "SecurityService uses the ValidateFilePathAsync method to prevent path traversal attacks.",
+  "keyFindings": [
+    "Path validation occurs in SecurityService.cs lines 45-67",
+    "Uses Path.GetFullPath() to normalize paths",
+    "Checks for directory traversal patterns (../, ../../, etc.)",
+    "Validates paths are within allowed workspace boundaries"
+  ],
+  "filesReferenced": [
+    "src/CodingAgent/Services/SecurityService.cs"
+  ]
+}
+```
+
+**Performance Requirements:**
+- Response time: < 2s
+- Summary conciseness: 3-5 bullet points max for accomplishments
+- Always include file change information
+- Accurate metrics reporting: 100%
+
+**Implementation Class:**
+```csharp
+public class SummaryAgentStep : KernelProcessStep<OrchestrationState>
+{
+    private readonly Kernel _summaryKernel;
+
+    [KernelFunction]
+    public async Task<SummaryResult> SummarizeTaskAsync(
+        KernelProcessStepContext context,
+        OrchestrationState state);
+
+    [KernelFunction]
+    public async Task<SummaryResult> SummarizeResearchAsync(
+        KernelProcessStepContext context,
+        OrchestrationState state);
+}
+```
+
+---
+
+### 4.5 Execution Agent
 
 **Purpose:** Execute plans step-by-step with focused context and tool usage.
 
@@ -483,10 +616,10 @@ public class ExecutionAgentStep : KernelProcessStep<OrchestrationState>
                 │                 │                 │
                 ▼                 ▼                 ▼
       ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-      │   Q&A Step   │  │ Planning Step│  │ Simple Reply │
-      │  (Gemini)    │  │  (gpt-4o)    │  │   Step       │
+      │ Research Step│  │ Planning Step│  │ Simple Reply │
+      │  (gpt-4o)    │  │(deepseek-r1) │  │   Step       │
       │              │  │              │  │              │
-      │  - Read ops  │  │  - Analyze   │  │  - Greet     │
+      │  - Read ops  │  │  - Reason    │  │  - Greet     │
       │  - Search    │  │  - Decompose │  │  - Clarify   │
       │  - Explain   │  │  - Validate  │  └──────┬───────┘
       └──────┬───────┘  └──────┬───────┘         │
@@ -506,6 +639,16 @@ public class ExecutionAgentStep : KernelProcessStep<OrchestrationState>
              └───────────────┼───────────────────┘
                              │
                              ▼
+                   ┌──────────────────┐
+                   │  Summary Agent   │
+                   │  (gpt-4o-mini)   │
+                   │                  │
+                   │  - Summarize     │
+                   │  - List changes  │
+                   │  - Next steps    │
+                   └────────┬─────────┘
+                            │
+                            ▼
                    ┌──────────────────┐
                    │  End Process     │
                    │  - Save session  │
@@ -528,9 +671,9 @@ public class CodingOrchestrationProcess
         var intentStep = processBuilder
             .AddStepFromType<IntentClassifierStep>("IntentClassifier");
 
-        // Step 2a: Q&A Handler
-        var qaStep = processBuilder
-            .AddStepFromType<QAAgentStep>("QAAgent");
+        // Step 2a: Research Handler
+        var researchStep = processBuilder
+            .AddStepFromType<ResearchAgentStep>("ResearchAgent");
 
         // Step 2b: Simple Reply Handler
         var simpleReplyStep = processBuilder
@@ -544,14 +687,18 @@ public class CodingOrchestrationProcess
         var executionStep = processBuilder
             .AddStepFromType<ExecutionAgentStep>("ExecutionAgent");
 
-        // Step 5: Completion Handler
+        // Step 5: Summary Agent
+        var summaryStep = processBuilder
+            .AddStepFromType<SummaryAgentStep>("SummaryAgent");
+
+        // Step 6: Completion Handler
         var completionStep = processBuilder
             .AddStepFromType<CompletionStep>("Completion");
 
         // Define event routing
         intentStep
             .OnEvent("QuestionDetected")
-            .SendEventTo(qaStep.WhereInputIs(nameof(OrchestrationState)));
+            .SendEventTo(researchStep.WhereInputIs(nameof(OrchestrationState)));
 
         intentStep
             .OnEvent("TaskDetected")
@@ -575,10 +722,14 @@ public class CodingOrchestrationProcess
 
         executionStep
             .OnEvent("PlanCompleted")
-            .SendEventTo(completionStep.WhereInputIs(nameof(OrchestrationState)));
+            .SendEventTo(summaryStep.WhereInputIs(nameof(OrchestrationState)));
 
-        qaStep
+        researchStep
             .OnEvent("AnswerReady")
+            .SendEventTo(summaryStep.WhereInputIs(nameof(OrchestrationState)));
+
+        summaryStep
+            .OnEvent("SummaryReady")
             .SendEventTo(completionStep.WhereInputIs(nameof(OrchestrationState)));
 
         simpleReplyStep
@@ -644,23 +795,22 @@ public class OrchestrationState
 ```csharp
 public class ModelSettings
 {
-    public ModelConfig IntentClassifier { get; set; }
-    public ModelConfig QuestionAnswering { get; set; }
-    public ModelConfig Planning { get; set; }
-    public ModelConfig Execution { get; set; }
-}
-
-public class ModelConfig
-{
-    // Provider: "AzureOpenAI" | "OpenAI" | "GoogleAI"
-    public string Provider { get; set; }
-
-    // Model identifier
-    public string Model { get; set; }
-
-    // API Configuration
+    // Shared Azure OpenAI Configuration
     public string Endpoint { get; set; }
     public string ApiKey { get; set; }
+
+    // Agent-specific configurations
+    public AgentModelConfig IntentClassifier { get; set; }
+    public AgentModelConfig Research { get; set; }
+    public AgentModelConfig Planning { get; set; }
+    public AgentModelConfig Summary { get; set; }
+    public AgentModelConfig Execution { get; set; }
+}
+
+public class AgentModelConfig
+{
+    // Model deployment name
+    public string Model { get; set; }
 
     // Generation Parameters
     public int MaxTokens { get; set; }
@@ -668,9 +818,6 @@ public class ModelConfig
 
     // Optional: Response format for structured output
     public string ResponseFormat { get; set; } // "text" | "json"
-
-    // Optional: Fallback model if primary unavailable
-    public string FallbackModel { get; set; }
 }
 ```
 
@@ -679,39 +826,34 @@ public class ModelConfig
 ```json
 {
   "Models": {
+    "Endpoint": "https://aif-az-coding-agent.openai.azure.com/",
+    "ApiKey": "",
     "IntentClassifier": {
-      "Provider": "AzureOpenAI",
       "Model": "gpt-4o-mini",
-      "Endpoint": "https://aif-az-coding-agent.openai.azure.com/",
-      "ApiKey": "",
       "MaxTokens": 500,
       "Temperature": 0.0,
       "ResponseFormat": "text"
     },
-    "QuestionAnswering": {
-      "Provider": "GoogleAI",
-      "Model": "gemini-1.5-pro-002",
-      "Endpoint": "https://generativelanguage.googleapis.com",
-      "ApiKey": "",
-      "MaxTokens": 8192,
+    "Research": {
+      "Model": "gpt-4o",
+      "MaxTokens": 16384,
       "Temperature": 0.3,
-      "ResponseFormat": "text",
-      "FallbackModel": "gpt-4o"
+      "ResponseFormat": "text"
     },
     "Planning": {
-      "Provider": "AzureOpenAI",
-      "Model": "gpt-4o",
-      "Endpoint": "https://aif-az-coding-agent.openai.azure.com/",
-      "ApiKey": "",
-      "MaxTokens": 4096,
+      "Model": "deepseek-r1",
+      "MaxTokens": 8192,
       "Temperature": 0.2,
       "ResponseFormat": "json"
     },
+    "Summary": {
+      "Model": "gpt-4o-mini",
+      "MaxTokens": 2048,
+      "Temperature": 0.3,
+      "ResponseFormat": "text"
+    },
     "Execution": {
-      "Provider": "AzureOpenAI",
       "Model": "gpt-4o",
-      "Endpoint": "https://aif-az-coding-agent.openai.azure.com/",
-      "ApiKey": "",
       "MaxTokens": 4096,
       "Temperature": 0.3,
       "ResponseFormat": "text"
@@ -736,39 +878,20 @@ public class KernelFactory
         var config = capability switch
         {
             AgentCapability.IntentClassification => _modelSettings.IntentClassifier,
-            AgentCapability.QuestionAnswering => _modelSettings.QuestionAnswering,
+            AgentCapability.Research => _modelSettings.Research,
             AgentCapability.Planning => _modelSettings.Planning,
+            AgentCapability.Summary => _modelSettings.Summary,
             AgentCapability.Execution => _modelSettings.Execution,
             _ => throw new ArgumentException($"Unknown capability: {capability}")
         };
 
         var builder = Kernel.CreateBuilder();
 
-        // Add model connector based on provider
-        switch (config.Provider)
-        {
-            case "AzureOpenAI":
-                builder.AddAzureOpenAIChatCompletion(
-                    deploymentName: config.Model,
-                    endpoint: config.Endpoint,
-                    apiKey: config.ApiKey);
-                break;
-
-            case "OpenAI":
-                builder.AddOpenAIChatCompletion(
-                    modelId: config.Model,
-                    apiKey: config.ApiKey);
-                break;
-
-            case "GoogleAI":
-                builder.AddGoogleAIGeminiChatCompletion(
-                    modelId: config.Model,
-                    apiKey: config.ApiKey);
-                break;
-
-            default:
-                throw new ArgumentException($"Unknown provider: {config.Provider}");
-        }
+        // Add Azure OpenAI chat completion (all agents use Azure OpenAI)
+        builder.AddAzureOpenAIChatCompletion(
+            deploymentName: config.Model,
+            endpoint: _modelSettings.Endpoint,
+            apiKey: _modelSettings.ApiKey);
 
         // Add plugins based on capability
         RegisterPlugins(builder, capability);
@@ -782,11 +905,13 @@ public class KernelFactory
     private void RegisterPlugins(IKernelBuilder builder, AgentCapability capability)
     {
         // Intent Classifier: No plugins needed
-        if (capability == AgentCapability.IntentClassification)
+        // Summary Agent: No plugins needed (works with state data only)
+        if (capability == AgentCapability.IntentClassification ||
+            capability == AgentCapability.Summary)
             return;
 
-        // Q&A Agent: Read-only plugins
-        if (capability == AgentCapability.QuestionAnswering)
+        // Research Agent: Read-only plugins
+        if (capability == AgentCapability.Research)
         {
             builder.Plugins.AddFromObject(_serviceProvider.GetRequiredService<FileOpsPlugin>(), "FileOps");
             builder.Plugins.AddFromObject(_serviceProvider.GetRequiredService<CodeNavPlugin>(), "CodeNav");
@@ -913,12 +1038,12 @@ public class StepError
 }
 ```
 
-### 7.4 Q&A Result
+### 7.4 Research Result
 
-**File:** `src/CodingAgent/Models/QAResult.cs`
+**File:** `src/CodingAgent/Models/ResearchResult.cs`
 
 ```csharp
-public class QAResult
+public class ResearchResult
 {
     public string Answer { get; set; }
     public List<CodeReference> References { get; set; }
@@ -931,6 +1056,38 @@ public class CodeReference
     public int LineStart { get; set; }
     public int LineEnd { get; set; }
     public string Snippet { get; set; }
+}
+```
+
+### 7.5 Summary Result
+
+**File:** `src/CodingAgent/Models/SummaryResult.cs`
+
+```csharp
+public class SummaryResult
+{
+    public string Summary { get; set; }
+    public List<string> Accomplishments { get; set; }
+    public List<string> KeyFindings { get; set; }
+    public FileChanges FilesChanged { get; set; }
+    public SummaryMetrics Metrics { get; set; }
+    public List<string> NextSteps { get; set; }
+    public List<string> FilesReferenced { get; set; }
+}
+
+public class FileChanges
+{
+    public List<string> Created { get; set; } = new();
+    public List<string> Modified { get; set; } = new();
+    public List<string> Deleted { get; set; } = new();
+}
+
+public class SummaryMetrics
+{
+    public string ExecutionTime { get; set; }
+    public int StepsCompleted { get; set; }
+    public int StepsTotal { get; set; }
+    public string SuccessRate { get; set; }
 }
 ```
 
@@ -1174,11 +1331,18 @@ public static class OrchestrationEndpoints
 - Tool invocation correctness
 - State persistence
 
-**Q&A Agent Tests:**
+**Research Agent Tests:**
 - Accuracy on codebase questions
 - Reference quality (file/line numbers)
 - Context window utilization
-- Fallback behavior
+- Error handling and edge cases
+
+**Summary Agent Tests:**
+- Summary accuracy and conciseness
+- Correct file change tracking
+- Metrics accuracy (execution time, success rate)
+- Next steps relevance
+- Handles both task and research summaries
 
 ### 10.2 Integration Tests
 
@@ -1219,7 +1383,7 @@ public async Task OrchestrationFlow_Task_ExecutesPlanSuccessfully()
 
 **Benchmarks:**
 - Intent classification: < 500ms (p95)
-- Q&A response: < 10s (p95)
+- Research response: < 10s (p95)
 - Planning: < 15s (p95)
 - Step execution: < 30s per step (p95)
 - Full task completion: < 5 minutes (p95)
@@ -1233,10 +1397,11 @@ public async Task OrchestrationFlow_Task_ExecutesPlanSuccessfully()
 
 **Track per request:**
 - Intent classification cost: ~$0.0002
-- Q&A cost: ~$0.01
-- Planning cost: ~$0.02
+- Research cost: ~$0.015
+- Planning cost: ~$0.008 (DeepSeek R1)
+- Summary cost: ~$0.0005
 - Execution cost: $0.02-0.10 (varies)
-- Total cost reduction vs v1: > 60%
+- Total cost reduction vs v1: > 70%
 
 ---
 
@@ -1314,7 +1479,7 @@ _logger.LogInformation(
 1. Install Semantic Kernel Process packages
 2. Implement ModelSettings configuration
 3. Create KernelFactory
-4. Add Google AI connector support
+4. Configure multiple Azure OpenAI kernel instances
 5. Update dependency injection
 
 **Deliverables:**
@@ -1326,10 +1491,11 @@ _logger.LogInformation(
 
 **Tasks:**
 1. Implement IntentClassifierStep
-2. Implement QAAgentStep with Gemini
-3. Implement PlanningAgentStep with structured output
+2. Implement ResearchAgentStep with GPT-4o
+3. Implement PlanningAgentStep with DeepSeek R1 and structured output
 4. Implement ExecutionAgentStep with step tracking
-5. Implement SimpleReplyStep
+5. Implement SummaryAgentStep with GPT-4o-mini
+6. Implement SimpleReplyStep
 
 **Deliverables:**
 - All agent steps functional
@@ -1386,7 +1552,7 @@ _logger.LogInformation(
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
-| Gemini API instability | High | Medium | Implement fallback to GPT-4o for Q&A |
+| Azure OpenAI rate limits | High | Medium | Implement rate limiting and retry logic |
 | Intent classification accuracy < 95% | Medium | Low | Collect training data, fine-tune prompts |
 | Process framework bugs | High | Low | Comprehensive testing, staged rollout |
 | Increased latency | Medium | Medium | Optimize prompts, parallel execution |
@@ -1431,9 +1597,10 @@ _logger.LogInformation(
 
 ### 14.3 Cost Requirements
 
-- ✅ Average cost reduction > 60% vs v1
+- ✅ Average cost reduction > 70% vs v1
 - ✅ Intent classification cost < $0.001 per request
-- ✅ Total cost per complex task < $0.20
+- ✅ Planning cost reduced 60% with DeepSeek R1
+- ✅ Total cost per complex task < $0.15
 
 ### 14.4 Quality Requirements
 
@@ -1482,9 +1649,6 @@ _logger.LogInformation(
 <!-- Semantic Kernel Process Framework -->
 <PackageReference Include="Microsoft.SemanticKernel.Process" Version="1.66.0" />
 
-<!-- Google AI Connector -->
-<PackageReference Include="Microsoft.SemanticKernel.Connectors.Google" Version="1.66.0" />
-
 <!-- JSON Schema for structured output -->
 <PackageReference Include="NJsonSchema" Version="11.0.0" />
 
@@ -1494,9 +1658,7 @@ _logger.LogInformation(
 
 ### 16.2 External Services
 
-- Azure OpenAI (existing)
-- Google AI API (new - requires API key)
-- Optional: OpenAI API (fallback)
+- Azure OpenAI (single endpoint for all agents)
 
 ### 16.3 Infrastructure
 
@@ -1517,7 +1679,7 @@ Input: "How does the SecurityService prevent path traversal attacks?"
 
 Expected:
 1. Intent classifier identifies as QUESTION (confidence > 0.9)
-2. Routed to QAAgent (Gemini)
+2. Routed to ResearchAgent (GPT-4o)
 3. Response includes:
    - Explanation of ValidateFilePathAsync method
    - Reference to SecurityService.cs:45-67
@@ -1586,12 +1748,12 @@ Expected:
 1. **Review & Approval**
    - Review this requirements document with stakeholders
    - Get approval on architecture approach
-   - Confirm budget for Google AI API
+   - Confirm Azure OpenAI deployment capacity
 
 2. **Environment Setup**
-   - Obtain Google AI API key
-   - Test Gemini API connectivity
+   - Verify Azure OpenAI deployments for gpt-4o and gpt-4o-mini
    - Verify Semantic Kernel Process package availability
+   - Test multi-kernel configuration
 
 3. **Proof of Concept**
    - Build minimal process with 2 steps
@@ -1607,18 +1769,16 @@ Expected:
 
 ### 18.3 Questions to Resolve
 
-- [ ] Confirm Google AI API budget/limits
-- [ ] Decide on fallback strategy if Gemini unavailable
 - [ ] Choose process visualization tool
 - [ ] Determine metrics storage (Application Insights vs custom)
 - [ ] Decide on v1 deprecation timeline
+- [ ] Confirm Azure OpenAI rate limits for concurrent agents
 
 ---
 
 ## Appendix A: References
 
 - [Semantic Kernel Process Framework Docs](https://learn.microsoft.com/en-us/semantic-kernel/concepts/process)
-- [Google AI Gemini API](https://ai.google.dev/docs)
 - [Azure OpenAI Service](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
 - [Semantic Kernel Connectors](https://learn.microsoft.com/en-us/semantic-kernel/concepts/connectors)
 
@@ -1633,8 +1793,3 @@ Expected:
 - **Plan** - Structured list of steps to execute for a task
 - **Step Result** - Outcome of executing a single plan step
 
----
-
-**Document Owner:** Development Team
-**Last Updated:** 2025-10-20
-**Next Review:** After Phase 1 completion
