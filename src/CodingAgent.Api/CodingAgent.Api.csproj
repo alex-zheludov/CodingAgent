@@ -4,9 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>aspire-CodingAgent-12345678</UserSecretsId>
-    <!-- Exclude workspace directory from compilation -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);workspace\**</DefaultItemExcludes>
+    <UserSecretsId>640366b3-58d9-4381-a7b2-307e6b7d5023</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
