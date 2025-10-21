@@ -35,17 +35,18 @@ public class OrchestrationEndpoints : IEndpointDefinition
             }
 
             var sessionId = Guid.NewGuid().ToString();
-            var result = await orchestrationService.ProcessRequestAsync(request.Instruction, sessionId);
+            var summary = await orchestrationService.ProcessInstructionAsync(request.Instruction);
+            var status = await orchestrationService.GetStatusAsync();
 
             return Results.Ok(new OrchestrationResponse(
                 SessionId: sessionId,
-                Response: result.Response,
-                Status: result.Status.ToString(),
-                Intent: result.Summary != null ? "Completed" : "Unknown",
-                Metrics: result.Metrics,
-                Summary: result.Summary,
-                Plan: result.Plan,
-                StepResults: result.StepResults));
+                Response: summary.Summary,
+                Status: status.ToString(),
+                Intent: "Completed",
+                Metrics: new Dictionary<string, object>(),
+                Summary: summary,
+                Plan: null,
+                StepResults: null));
         }
         catch (Exception ex)
         {
@@ -58,14 +59,9 @@ public class OrchestrationEndpoints : IEndpointDefinition
         string sessionId,
         [FromServices] IOrchestrationService orchestrationService)
     {
-        var state = await orchestrationService.GetStateAsync(sessionId);
+        var status = await orchestrationService.GetStatusAsync();
 
-        if (state == null)
-        {
-            return Results.NotFound(new { error = "Session not found" });
-        }
-
-        return Results.Ok(state);
+        return Results.Ok(new { sessionId, status = status.ToString() });
     }
 }
 

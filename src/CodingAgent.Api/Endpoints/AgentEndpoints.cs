@@ -40,7 +40,7 @@ public class AgentEndpoints : IEndpointDefinition
 
     private static async Task<IResult> ExecuteTaskAsync(
         [FromBody] ExecuteRequest request,
-        [FromServices] ICodingAgent orchestrator,
+        [FromServices] IOrchestrationService orchestrationService,
         [FromServices] ILogger<AgentEndpoints> logger)
     {
         try
@@ -50,12 +50,14 @@ public class AgentEndpoints : IEndpointDefinition
                 return Results.BadRequest(new { error = "Instruction is required" });
             }
 
-            await orchestrator.ExecuteInstructionAsync(request.Instruction);
+            var result = await orchestrationService.ProcessInstructionAsync(request.Instruction);
 
-            return Results.Ok(new ExecuteResponse(
-                Success: true,
-                Message: "Task accepted and processing",
-                SessionId: orchestrator.SessionId));
+            return Results.Ok(new
+            {
+                success = true,
+                message = "Task completed",
+                summary = result
+            });
         }
         catch (Exception ex)
         {
@@ -88,10 +90,10 @@ public class AgentEndpoints : IEndpointDefinition
     }
 
     private static async Task<IResult> GetStatusAsync(
-        [FromServices] ICodingAgent orchestrator)
+        [FromServices] IOrchestrationService orchestrationService)
     {
-        var status = await orchestrator.GetStatusAsync();
-        return Results.Ok(status);
+        var status = await orchestrationService.GetStatusAsync();
+        return Results.Ok(new { status });
     }
 
     private static async Task<IResult> GetConversationAsync(

@@ -1,11 +1,11 @@
 using CodingAgent.Agents;
-using CodingAgent.Agents.Orchestration;
 using CodingAgent.Configuration;
 using CodingAgent.Configuration.Validators;
 using CodingAgent.Data;
 using CodingAgent.Endpoints;
 using CodingAgent.Extensions;
 using CodingAgent.Plugins;
+using CodingAgent.Processes.Steps;
 using CodingAgent.Services;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -82,12 +82,14 @@ builder.Services.AddScoped<ICodingAgent, CodingAgent.Agents.CodingCodingAgent>()
 
 // Add Multi-Agent Orchestration Services
 builder.Services.AddSingleton<IKernelFactory, KernelFactory>();
-builder.Services.AddScoped<IIntentClassifierAgent, IntentClassifierAgent>();
-builder.Services.AddScoped<IResearchAgent, ResearchAgent>();
-builder.Services.AddScoped<IPlanningAgent, PlanningAgent>();
-builder.Services.AddScoped<ISummaryAgent, SummaryAgent>();
-builder.Services.AddScoped<IExecutionAgent, ExecutionAgent>();
 builder.Services.AddScoped<IOrchestrationService, OrchestrationService>();
+
+// Register Process Steps
+builder.Services.AddTransient<IntentClassifierStep>();
+builder.Services.AddTransient<ResearchAgentStep>();
+builder.Services.AddTransient<PlanningAgentStep>();
+builder.Services.AddTransient<ExecutionAgentStep>();
+builder.Services.AddTransient<SummaryAgentStep>();
 
 // Add OpenAPI/Swagger
 builder.Services.AddOpenApi();

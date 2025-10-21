@@ -13,6 +13,8 @@
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Azure.AI.OpenAI" />
     <PackageReference Include="Microsoft.SemanticKernel.Process.Abstractions" />
+    <PackageReference Include="Microsoft.SemanticKernel.Process.Core" />
+    <PackageReference Include="Microsoft.SemanticKernel.Process.LocalRuntime" />
     <PackageReference Include="Polly" />
 
     <!-- Database -->
