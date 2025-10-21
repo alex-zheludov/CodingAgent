@@ -1,4 +1,5 @@
 using CodingAgent.Agents;
+using CodingAgent.Agents.Orchestration;
 using CodingAgent.Configuration;
 using CodingAgent.Configuration.Validators;
 using CodingAgent.Data;
@@ -33,6 +34,15 @@ builder.Services.AddOptions<OrchestratorSettings>()
 
 builder.Services.AddOptions<SecuritySettings>()
     .BindConfiguration(SecuritySettings.SectionName);
+
+// Add Model Settings for Multi-Agent Orchestration
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var modelSettings = new ModelSettings();
+    config.GetSection(ModelSettings.SectionName).Bind(modelSettings);
+    return modelSettings;
+});
 
 // Add FluentValidation validators
 builder.Services.AddValidatorsFromAssemblyContaining<AzureOpenAISettingsValidator>();
@@ -70,6 +80,15 @@ builder.Services.AddSingleton(sp =>
 // Add orchestrator (depends on plugins and workspace context)
 builder.Services.AddScoped<ICodingAgent, CodingAgent.Agents.CodingCodingAgent>();
 
+// Add Multi-Agent Orchestration Services
+builder.Services.AddSingleton<IKernelFactory, KernelFactory>();
+builder.Services.AddScoped<IIntentClassifierAgent, IntentClassifierAgent>();
+builder.Services.AddScoped<IResearchAgent, ResearchAgent>();
+builder.Services.AddScoped<IPlanningAgent, PlanningAgent>();
+builder.Services.AddScoped<ISummaryAgent, SummaryAgent>();
+builder.Services.AddScoped<IExecutionAgent, ExecutionAgent>();
+builder.Services.AddScoped<IOrchestrationService, OrchestrationService>();
+
 // Add OpenAPI/Swagger
 builder.Services.AddOpenApi();
 
@@ -105,7 +124,8 @@ app.UseHttpsRedirection();
 // Map endpoints
 var endpointDefinitions = new IEndpointDefinition[]
 {
-    new AgentEndpoints()
+    new AgentEndpoints(),
+    new OrchestrationEndpoints()
 };
 
 foreach (var definition in endpointDefinitions)

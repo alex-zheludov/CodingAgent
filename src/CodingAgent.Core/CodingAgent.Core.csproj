@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.SemanticKernel.Connectors.AzureOpenAI" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Azure.AI.OpenAI" />
+    <PackageReference Include="Microsoft.SemanticKernel.Process.Abstractions" />
     <PackageReference Include="Polly" />
 
     <!-- Database -->
