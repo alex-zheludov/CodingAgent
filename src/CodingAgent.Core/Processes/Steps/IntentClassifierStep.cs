@@ -39,7 +39,7 @@ public class IntentClassifierStep : KernelProcessStep
     }
 
     [KernelFunction(Functions.ClassifyIntent)]
-    public async Task<IntentResult> ClassifyIntentAsync(KernelProcessStepContext context, string input, WorkspaceContext workspaceContext)
+    public async Task<IntentResult> ClassifyIntentAsync(KernelProcessStepContext context, ProcessInput processInput)
     {
         // Lazy initialize kernel
         _kernel ??= _kernelFactory.CreateKernel(AgentCapability.IntentClassification);
@@ -62,7 +62,7 @@ public class IntentClassifierStep : KernelProcessStep
             }
             """;
 
-        var userPrompt = $"User Request: {input}\n\nClassify this request.";
+        var userPrompt = $"User Request: {processInput.Input}\n\nClassify this request.";
 
         var chatHistory = new ChatHistory();
         chatHistory.AddSystemMessage(systemPrompt);
@@ -75,21 +75,43 @@ public class IntentClassifierStep : KernelProcessStep
         {
             var result = JsonSerializer.Deserialize<IntentResult>(content, new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true
+                PropertyNameCaseInsensitive = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(allowIntegerValues: false) }
             }) ?? throw new InvalidOperationException("Failed to deserialize");
 
             _logger.LogInformation("Intent: {Intent} (Confidence: {Confidence})", result.Intent, result.Confidence);
 
-            // Emit appropriate event based on intent
-            var eventName = result.Intent switch
+            // Emit appropriate event based on intent with the correct data type
+            switch (result.Intent)
             {
-                IntentType.Question => OutputEvents.QuestionDetected,
-                IntentType.Task => OutputEvents.TaskDetected,
-                IntentType.Greeting => OutputEvents.GreetingDetected,
-                _ => OutputEvents.UnclearDetected
-            };
+                case IntentType.Question:
+                    var researchInput = new ResearchInput
+                    {
+                        Question = processInput.Input,
+                        WorkspaceContext = processInput.WorkspaceContext,
+                        Intent = result
+                    };
+                    await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.QuestionDetected, Data = researchInput });
+                    break;
 
-            await context.EmitEventAsync(new KernelProcessEvent { Id = eventName, Data = result });
+                case IntentType.Task:
+                    var planningInput = new PlanningInput
+                    {
+                        Task = processInput.Input,
+                        WorkspaceContext = processInput.WorkspaceContext,
+                        Intent = result
+                    };
+                    await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.TaskDetected, Data = planningInput });
+                    break;
+
+                case IntentType.Greeting:
+                case IntentType.Unclear:
+                default:
+                    // For greeting/unclear, we don't have specialized handlers yet, so just emit the result
+                    var eventName = result.Intent == IntentType.Greeting ? OutputEvents.GreetingDetected : OutputEvents.UnclearDetected;
+                    await context.EmitEventAsync(new KernelProcessEvent { Id = eventName, Data = result });
+                    break;
+            }
 
             return result;
         }

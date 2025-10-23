@@ -22,6 +22,7 @@ public class OrchestrationService : IOrchestrationService
     private readonly ILogger<OrchestrationService> _logger;
     private readonly IServiceProvider _serviceProvider;
     private OrchestrationState _state;
+    private SummaryResult? _capturedSummary;
 
     public OrchestrationService(
         IKernelFactory kernelFactory,
@@ -49,26 +50,49 @@ public class OrchestrationService : IOrchestrationService
             // Build the process
             var process = CodingOrchestrationProcess.BuildProcess();
 
-            // Create kernel for process execution
-            var kernel = _kernelFactory.CreateKernel(AgentCapability.IntentClassification);
+            // Create kernel for process execution with service provider
+            // The kernel needs access to our DI container for process steps
+            var kernelBuilder = Kernel.CreateBuilder();
+
+            // Add the service provider so process steps can resolve dependencies
+            kernelBuilder.Services.AddSingleton(_serviceProvider.GetRequiredService<IKernelFactory>());
+
+            // Add logging - use the existing ILoggerFactory from our DI container
+            kernelBuilder.Services.AddSingleton(_serviceProvider.GetRequiredService<ILoggerFactory>());
+            kernelBuilder.Services.AddLogging();
+
+            // Add a callback action for summary step to store the result
+            Action<SummaryResult> captureSummary = (summary) => _capturedSummary = summary;
+            kernelBuilder.Services.AddSingleton(captureSummary);
+
+            var kernel = kernelBuilder.Build();
+
+            // Create the input for the process
+            var processInput = new ProcessInput
+            {
+                Input = instruction,
+                WorkspaceContext = workspaceContext
+            };
 
             // Start the process with Start event
-            // Note: The process will run asynchronously and emit events between steps
-            // The final Summary step will be triggered automatically by the process framework
-            await process.StartAsync(
+            // Note: The SK Process runs the entire workflow to completion
+            _logger.LogInformation("Starting process with input: {Input}", instruction);
+
+            var processHandle = await process.StartAsync(
                 kernel,
                 new KernelProcessEvent
                 {
                     Id = "Start",
-                    Data = new { input = instruction, workspaceContext }
+                    Data = processInput
                 });
 
+            _logger.LogInformation("Process started, handle ID: {HandleId}", processHandle);
+
+            // The process runs to completion, so we can mark as complete
             _state.Status = AgentState.Complete;
 
-            // For now, return a placeholder summary
-            // TODO: In a real implementation, we'd need to capture the summary result from the process
-            // This might require updating the Summary step to store its result somewhere accessible
-            var summaryResult = _state.SummaryResult ?? new SummaryResult
+            // Return the captured summary, or a placeholder if summary step didn't execute
+            var summaryResult = _capturedSummary ?? new SummaryResult
             {
                 Summary = "Process completed successfully",
                 Metrics = new SummaryMetrics
@@ -78,6 +102,8 @@ public class OrchestrationService : IOrchestrationService
                     SuccessRate = "100%"
                 }
             };
+
+            _logger.LogInformation("Process complete. Summary: {Summary}", summaryResult.Summary);
 
             return summaryResult;
         }

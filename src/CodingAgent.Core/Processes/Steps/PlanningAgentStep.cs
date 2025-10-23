@@ -35,12 +35,12 @@ public class PlanningAgentStep : KernelProcessStep
     }
 
     [KernelFunction(Functions.CreatePlan)]
-    public async Task<ExecutionPlan> CreatePlanAsync(KernelProcessStepContext context, string task, WorkspaceContext workspaceContext)
+    public async Task<ExecutionPlan> CreatePlanAsync(KernelProcessStepContext context, PlanningInput input)
     {
         _kernel ??= _kernelFactory.CreateKernel(AgentCapability.Planning);
         _chatService ??= _kernel.GetRequiredService<IChatCompletionService>();
 
-        var contextInfo = BuildContextInfo(workspaceContext);
+        var contextInfo = BuildContextInfo(input.WorkspaceContext);
 
         var systemPrompt = $$"""
             You are a planning agent using DeepSeek R1. Create detailed execution plans.
@@ -65,7 +65,13 @@ public class PlanningAgentStep : KernelProcessStep
                   "expectedOutcome": "outcome"
                 }
               ],
-              "risks": [],
+              "risks": [
+                {
+                  "description": "risk description",
+                  "mitigation": "mitigation strategy",
+                  "severity": "low"
+                }
+              ],
               "requiredTools": ["FileOps"],
               "confidence": 0.9
             }
@@ -73,31 +79,64 @@ public class PlanningAgentStep : KernelProcessStep
 
         var chatHistory = new ChatHistory();
         chatHistory.AddSystemMessage(systemPrompt);
-        chatHistory.AddUserMessage($"Create a plan for: {task}");
+        chatHistory.AddUserMessage($"Create a plan for: {input.Task}");
 
         var response = await _chatService.GetChatMessageContentAsync(chatHistory, kernel: _kernel);
         var content = response.Content ?? throw new InvalidOperationException("No response");
 
+        _logger.LogInformation("Planning response length: {Length}, Content preview: {Preview}",
+            content.Length, content.Length > 100 ? content.Substring(0, 100) : content);
+
+        // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
+        var jsonContent = content.Trim();
+        if (jsonContent.StartsWith("```"))
+        {
+            // Remove opening fence (```json or ```)
+            var firstLineEnd = jsonContent.IndexOf('\n');
+            if (firstLineEnd > 0)
+            {
+                jsonContent = jsonContent.Substring(firstLineEnd + 1);
+            }
+
+            // Remove closing fence (```)
+            var lastFenceIndex = jsonContent.LastIndexOf("```");
+            if (lastFenceIndex > 0)
+            {
+                jsonContent = jsonContent.Substring(0, lastFenceIndex);
+            }
+
+            jsonContent = jsonContent.Trim();
+            _logger.LogInformation("Stripped markdown fences. New length: {Length}", jsonContent.Length);
+        }
+
         try
         {
-            var plan = JsonSerializer.Deserialize<ExecutionPlan>(content, new JsonSerializerOptions
+            var plan = JsonSerializer.Deserialize<ExecutionPlan>(jsonContent, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             }) ?? throw new InvalidOperationException("Failed to deserialize");
 
             _logger.LogInformation("Created plan with {StepCount} steps", plan.Steps.Count);
 
-            await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.PlanReady, Data = plan });
+            // Create ExecutionInput for the next step
+            var executionInput = new ExecutionInput
+            {
+                Plan = plan,
+                WorkspaceContext = input.WorkspaceContext
+            };
+
+            await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.PlanReady, Data = executionInput });
 
             return plan;
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "Failed to parse plan");
+            _logger.LogWarning(ex, "Failed to deserialize plan JSON. Using fallback. Response was: {Response}",
+                content.Length > 500 ? content.Substring(0, 500) : content);
 
             var fallbackPlan = new ExecutionPlan
             {
-                Task = task,
+                Task = input.Task,
                 EstimatedIterations = 5,
                 Steps = new List<PlanStep>
                 {
@@ -105,14 +144,21 @@ public class PlanningAgentStep : KernelProcessStep
                     {
                         StepId = 1,
                         Action = "Execute task",
-                        Description = task,
+                        Description = input.Task,
                         ExpectedOutcome = "Task completed"
                     }
                 },
                 Confidence = 0.3
             };
 
-            await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.PlanReady, Data = fallbackPlan });
+            // Create ExecutionInput for the fallback plan
+            var fallbackExecutionInput = new ExecutionInput
+            {
+                Plan = fallbackPlan,
+                WorkspaceContext = input.WorkspaceContext
+            };
+
+            await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.PlanReady, Data = fallbackExecutionInput });
 
             return fallbackPlan;
         }

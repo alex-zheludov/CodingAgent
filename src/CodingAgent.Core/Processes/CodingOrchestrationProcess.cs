@@ -1,5 +1,6 @@
 #pragma warning disable SKEXP0080 // SK Process Framework is experimental
 
+using CodingAgent.Models.Orchestration;
 using CodingAgent.Processes.Steps;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Process;

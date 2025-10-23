@@ -35,14 +35,14 @@ public class ExecutionAgentStep : KernelProcessStep
     }
 
     [KernelFunction(Functions.ExecutePlan)]
-    public async Task<List<StepResult>> ExecutePlanAsync(KernelProcessStepContext context, ExecutionPlan plan, WorkspaceContext workspaceContext)
+    public async Task<List<StepResult>> ExecutePlanAsync(KernelProcessStepContext context, ExecutionInput input)
     {
         _kernel ??= _kernelFactory.CreateKernel(AgentCapability.Execution);
         _chatService ??= _kernel.GetRequiredService<IChatCompletionService>();
 
         var results = new List<StepResult>();
 
-        foreach (var step in plan.Steps.OrderBy(s => s.StepId))
+        foreach (var step in input.Plan.Steps.OrderBy(s => s.StepId))
         {
             var dependenciesMet = step.Dependencies.All(depId =>
                 results.Any(r => r.StepId == depId && r.Status == StepStatus.Completed));
@@ -72,7 +72,15 @@ public class ExecutionAgentStep : KernelProcessStep
             }
         }
 
-        await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.PlanCompleted, Data = results });
+        // Create SummaryTaskInput for the summary step
+        var summaryInput = new SummaryTaskInput
+        {
+            Steps = results,
+            OriginalTask = input.Plan.Task,
+            Plan = input.Plan
+        };
+
+        await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.PlanCompleted, Data = summaryInput });
 
         return results;
     }

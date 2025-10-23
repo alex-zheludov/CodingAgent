@@ -24,22 +24,24 @@ public class SummaryAgentStep : KernelProcessStep
 
     private readonly IKernelFactory _kernelFactory;
     private readonly ILogger<SummaryAgentStep> _logger;
+    private readonly Action<SummaryResult>? _captureSummary;
     private Kernel? _kernel;
     private IChatCompletionService? _chatService;
 
     public SummaryAgentStep(
         IKernelFactory kernelFactory,
-        ILogger<SummaryAgentStep> logger)
+        ILogger<SummaryAgentStep> logger,
+        Action<SummaryResult>? captureSummary = null)
     {
         _kernelFactory = kernelFactory;
         _logger = logger;
+        _captureSummary = captureSummary;
     }
 
     [KernelFunction(Functions.SummarizeTask)]
     public async Task<SummaryResult> SummarizeTaskAsync(
         KernelProcessStepContext context,
-        ExecutionPlan plan,
-        List<StepResult> stepResults)
+        SummaryTaskInput input)
     {
         _kernel ??= _kernelFactory.CreateKernel(AgentCapability.Summary);
         _chatService ??= _kernel.GetRequiredService<IChatCompletionService>();
@@ -55,12 +57,12 @@ public class SummaryAgentStep : KernelProcessStep
             }
             """;
 
-        var stepsSummary = string.Join("\n", stepResults.Select(s =>
+        var stepsSummary = string.Join("\n", input.Steps.Select(s =>
             $"Step {s.StepId}: {s.Outcome} ({s.Status})"));
 
         var userPrompt = $"""
-            Task: {plan.Task}
-            Steps: {stepResults.Count(s => s.Status == StepStatus.Completed)}/{plan.Steps.Count}
+            Task: {input.Plan.Task}
+            Steps: {input.Steps.Count(s => s.Status == StepStatus.Completed)}/{input.Plan.Steps.Count}
 
             Results:
             {stepsSummary}
@@ -75,12 +77,35 @@ public class SummaryAgentStep : KernelProcessStep
         var response = await _chatService.GetChatMessageContentAsync(chatHistory, kernel: _kernel);
         var content = response.Content ?? "";
 
+        // Strip markdown code fences if present
+        var jsonContent = content.Trim();
+        if (jsonContent.StartsWith("```"))
+        {
+            var firstLineEnd = jsonContent.IndexOf('\n');
+            if (firstLineEnd > 0)
+            {
+                jsonContent = jsonContent.Substring(firstLineEnd + 1);
+            }
+
+            var lastFenceIndex = jsonContent.LastIndexOf("```");
+            if (lastFenceIndex > 0)
+            {
+                jsonContent = jsonContent.Substring(0, lastFenceIndex);
+            }
+
+            jsonContent = jsonContent.Trim();
+        }
+
         try
         {
-            var summary = JsonSerializer.Deserialize<SummaryResult>(content, new JsonSerializerOptions
+            var summary = JsonSerializer.Deserialize<SummaryResult>(jsonContent, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
-            }) ?? CreateFallbackTaskSummary(plan, stepResults);
+            }) ?? CreateFallbackTaskSummary(input.Plan, input.Steps);
+
+            // Capture the summary for the orchestration service
+            _captureSummary?.Invoke(summary);
+            _logger.LogInformation("Task summary created: {Summary}", summary.Summary);
 
             await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.SummaryReady, Data = summary });
 
@@ -88,7 +113,12 @@ public class SummaryAgentStep : KernelProcessStep
         }
         catch (JsonException)
         {
-            var fallback = CreateFallbackTaskSummary(plan, stepResults);
+            var fallback = CreateFallbackTaskSummary(input.Plan, input.Steps);
+
+            // Capture the fallback summary
+            _captureSummary?.Invoke(fallback);
+            _logger.LogInformation("Task summary created (fallback): {Summary}", fallback.Summary);
+
             await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.SummaryReady, Data = fallback });
             return fallback;
         }
@@ -97,8 +127,7 @@ public class SummaryAgentStep : KernelProcessStep
     [KernelFunction(Functions.SummarizeResearch)]
     public async Task<SummaryResult> SummarizeResearchAsync(
         KernelProcessStepContext context,
-        string question,
-        ResearchResult researchResult)
+        SummaryResearchInput input)
     {
         _kernel ??= _kernelFactory.CreateKernel(AgentCapability.Summary);
         _chatService ??= _kernel.GetRequiredService<IChatCompletionService>();
@@ -114,25 +143,64 @@ public class SummaryAgentStep : KernelProcessStep
 
         var chatHistory = new ChatHistory();
         chatHistory.AddSystemMessage(systemPrompt);
-        chatHistory.AddUserMessage($"Question: {question}\nAnswer: {researchResult.Answer}");
+        chatHistory.AddUserMessage($"Question: {input.OriginalQuestion}\nAnswer: {input.Research.Answer}");
+
+        _logger.LogInformation("Summarizing research. Answer length: {Length}", input.Research.Answer.Length);
 
         var response = await _chatService.GetChatMessageContentAsync(chatHistory, kernel: _kernel);
         var content = response.Content ?? "";
 
+        _logger.LogInformation("Summary response length: {Length}, Content preview: {Preview}",
+            content.Length, content.Length > 100 ? content.Substring(0, 100) : content);
+
+        // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
+        var jsonContent = content.Trim();
+        if (jsonContent.StartsWith("```"))
+        {
+            // Remove opening fence (```json or ```)
+            var firstLineEnd = jsonContent.IndexOf('\n');
+            if (firstLineEnd > 0)
+            {
+                jsonContent = jsonContent.Substring(firstLineEnd + 1);
+            }
+
+            // Remove closing fence (```)
+            var lastFenceIndex = jsonContent.LastIndexOf("```");
+            if (lastFenceIndex > 0)
+            {
+                jsonContent = jsonContent.Substring(0, lastFenceIndex);
+            }
+
+            jsonContent = jsonContent.Trim();
+            _logger.LogInformation("Stripped markdown fences. New length: {Length}", jsonContent.Length);
+        }
+
         try
         {
-            var summary = JsonSerializer.Deserialize<SummaryResult>(content, new JsonSerializerOptions
+            var summary = JsonSerializer.Deserialize<SummaryResult>(jsonContent, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
-            }) ?? CreateFallbackResearchSummary(question, researchResult);
+            }) ?? CreateFallbackResearchSummary(input.OriginalQuestion, input.Research);
+
+            // Capture the summary for the orchestration service
+            _captureSummary?.Invoke(summary);
+            _logger.LogInformation("Research summary created: {Summary}", summary.Summary);
 
             await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.SummaryReady, Data = summary });
 
             return summary;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            var fallback = CreateFallbackResearchSummary(question, researchResult);
+            _logger.LogWarning(ex, "Failed to deserialize summary JSON. Using fallback. Response was: {Response}",
+                content.Length > 500 ? content.Substring(0, 500) : content);
+
+            var fallback = CreateFallbackResearchSummary(input.OriginalQuestion, input.Research);
+
+            // Capture the fallback summary
+            _captureSummary?.Invoke(fallback);
+            _logger.LogInformation("Research summary created (fallback): {Summary}", fallback.Summary);
+
             await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.SummaryReady, Data = fallback });
             return fallback;
         }

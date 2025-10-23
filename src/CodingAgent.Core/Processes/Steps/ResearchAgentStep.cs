@@ -35,28 +35,72 @@ public class ResearchAgentStep : KernelProcessStep
     }
 
     [KernelFunction(Functions.Answer)]
-    public async Task<ResearchResult> AnswerAsync(KernelProcessStepContext context, string question, WorkspaceContext workspaceContext)
+    public async Task<ResearchResult> AnswerAsync(KernelProcessStepContext context, ResearchInput input)
     {
+        _logger.LogInformation("ResearchAgent invoked with question: {Question}", input.Question);
+
         _kernel ??= _kernelFactory.CreateKernel(AgentCapability.Research);
         _chatService ??= _kernel.GetRequiredService<IChatCompletionService>();
 
-        var contextInfo = BuildContextInfo(workspaceContext);
+        var contextInfo = BuildContextInfo(input.WorkspaceContext);
 
         var systemPrompt = $"""
-            You are a code research agent. Answer questions about the codebase using available tools.
+            You are a code research agent. Your job is to answer questions about the codebase by conducting thorough research using available tools.
 
             ## Your Environment
             {contextInfo}
 
+            ## IMPORTANT: File Path Structure
+            - All file paths are relative to the workspace root
+            - Each repository is a subdirectory in the workspace
+            - To access files in a repository, use paths like: "RepositoryName/path/to/file"
+            - Examples:
+              - List directory: FileOps-ListDirectory with path "Test-Repo" and pattern "*"
+              - Read a file: FileOps-ReadFile with path "Test-Repo/HelloWorld/Program.cs"
+              - List subdirectory: FileOps-ListDirectory with path "Test-Repo/HelloWorld" and pattern "*.cs"
+
             ## Your Capabilities
-            Use FileOps, Git, and CodeNav tools to gather information.
-            Provide accurate answers with file/line references.
-            End your response with <DONE> when finished.
+            You have access to these tools via function calling:
+
+            **FileOps**: Read, write, list, and search files
+            **Git**: Check status, create commits, push changes, manage branches
+            **CodeNav**: Navigate code structure, find definitions, search patterns
+
+            ## CRITICAL: How to Answer Questions
+
+            **Be proactive and investigative!**
+            - ALWAYS use tools to gather information before answering
+            - For questions like "what does this project do?" or "tell me about repository":
+              1. Check the workspace context to see which repositories exist
+              2. Try FileOps-ReadFile("RepositoryName/README.md") for each repository
+              3. List repository contents: FileOps-ListDirectory("RepositoryName", "*")
+              4. Read key files found in the workspace context
+              5. Examine actual code to understand purpose
+            - **NEVER give up after one failed tool call**
+            - **NEVER say "I can't determine" without trying multiple approaches**
+            - Provide comprehensive information based on actual code examination
+            - End your response with <DONE>
+
+            ## Examples
+
+            User: "what's in the Test-Repo repository?"
+            You: [calls FileOps-ListDirectory("Test-Repo", "*")]
+            You: "The Test-Repo repository contains: HelloWorld/ folder and project files. <DONE>"
+
+            User: "what does this repository do?"
+            You: [sees Test-Repo in workspace context]
+            You: [calls FileOps-ReadFile("Test-Repo/README.md")] - file not found
+            You: [calls FileOps-ListDirectory("Test-Repo", "*")] - sees HelloWorld folder
+            You: [calls FileOps-ReadFile("Test-Repo/HelloWorld/HelloWorld.csproj")] - examines project
+            You: [calls FileOps-ReadFile("Test-Repo/HelloWorld/Program.cs")] - reads entry point
+            You: "This repository contains a simple .NET console application called HelloWorld that prints 'Hello World' to the console. <DONE>"
+
+            IMPORTANT: If you don't call any tools in your response, you MUST include <DONE> marker.
             """;
 
         var chatHistory = new ChatHistory();
         chatHistory.AddSystemMessage(systemPrompt);
-        chatHistory.AddUserMessage($"Question: {question}");
+        chatHistory.AddUserMessage($"Question: {input.Question}");
 
         var executionSettings = new OpenAIPromptExecutionSettings
         {
@@ -78,18 +122,28 @@ public class ResearchAgentStep : KernelProcessStep
             var content = response.Content ?? "";
             chatHistory.AddAssistantMessage(content);
 
+            var toolCallsDetected = response.Metadata?.ContainsKey("ToolCalls") == true;
+            _logger.LogInformation("Research iteration {Iteration}: ToolCalls={ToolCalls}, ContentLength={Length}",
+                iteration, toolCallsDetected, content.Length);
+
             if (content.Contains("<DONE>", StringComparison.Ordinal))
             {
                 finalAnswer = content.Replace("<DONE>", "").Trim();
+                _logger.LogInformation("Research completed with <DONE> marker. Answer length: {Length}", finalAnswer.Length);
                 break;
             }
 
-            var toolCallsDetected = response.Metadata?.ContainsKey("ToolCalls") == true;
             if (!toolCallsDetected && iteration > 0)
             {
                 finalAnswer = content;
+                _logger.LogInformation("Research completed without tools. Answer length: {Length}", finalAnswer.Length);
                 break;
             }
+        }
+
+        if (string.IsNullOrEmpty(finalAnswer))
+        {
+            _logger.LogWarning("Research completed {MaxIterations} iterations without producing an answer", maxIterations);
         }
 
         var result = new ResearchResult
@@ -99,7 +153,14 @@ public class ResearchAgentStep : KernelProcessStep
             Confidence = 0.85
         };
 
-        await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.AnswerReady, Data = result });
+        // Create SummaryResearchInput for the summary step
+        var summaryInput = new SummaryResearchInput
+        {
+            Research = result,
+            OriginalQuestion = input.Question
+        };
+
+        await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.AnswerReady, Data = summaryInput });
 
         return result;
     }

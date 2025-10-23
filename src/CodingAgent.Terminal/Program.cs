@@ -4,6 +4,7 @@ using CodingAgent.Configuration.Validators;
 using CodingAgent.Data;
 using CodingAgent.Extensions;
 using CodingAgent.Plugins;
+using CodingAgent.Processes.Steps;
 using CodingAgent.Services;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -12,8 +13,25 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Serilog;
+using Serilog.Events;
+
+// Configure Serilog before creating the host builder
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File("logs/codingagent-.txt",
+        rollingInterval: RollingInterval.Day,
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
 
 var builder = Host.CreateApplicationBuilder(args);
+
+// Use Serilog for logging
+builder.Services.AddSerilog();
 
 builder.Configuration.AddUserSecrets<Program>();
 
@@ -35,6 +53,15 @@ builder.Services.AddOptions<OrchestratorSettings>()
 
 builder.Services.AddOptions<SecuritySettings>()
     .BindConfiguration(SecuritySettings.SectionName);
+
+// Add Model Settings for Multi-Agent Orchestration
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var modelSettings = new ModelSettings();
+    config.GetSection(ModelSettings.SectionName).Bind(modelSettings);
+    return modelSettings;
+});
 
 // Add FluentValidation validators
 builder.Services.AddValidatorsFromAssemblyContaining<AzureOpenAISettingsValidator>();
@@ -69,8 +96,19 @@ builder.Services.AddSingleton(sp =>
     return workspaceContext;
 });
 
-// Add agent
-builder.Services.AddScoped<ICodingAgent, CodingCodingAgent>();
+// Add agent (legacy - keeping for backward compatibility if needed)
+// builder.Services.AddScoped<ICodingAgent, CodingCodingAgent>();
+
+// Add Multi-Agent Orchestration Services
+builder.Services.AddSingleton<IKernelFactory, KernelFactory>();
+builder.Services.AddScoped<IOrchestrationService, OrchestrationService>();
+
+// Register Process Steps
+builder.Services.AddTransient<IntentClassifierStep>();
+builder.Services.AddTransient<ResearchAgentStep>();
+builder.Services.AddTransient<PlanningAgentStep>();
+builder.Services.AddTransient<ExecutionAgentStep>();
+builder.Services.AddTransient<SummaryAgentStep>();
 
 var app = builder.Build();
 
@@ -78,15 +116,16 @@ var app = builder.Build();
 var initService = app.Services.GetRequiredService<IInitializationService>();
 workspaceContext = await initService.InitializeAsync();
 
-// Create a scope for the agent
+// Create a scope for the orchestration service
 using var scope = app.Services.CreateScope();
-var agent = scope.ServiceProvider.GetRequiredService<ICodingAgent>();
+var orchestrationService = scope.ServiceProvider.GetRequiredService<IOrchestrationService>();
+var agentSettings = scope.ServiceProvider.GetRequiredService<IOptions<AgentSettings>>().Value;
 var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
 Console.WriteLine("===========================================");
-Console.WriteLine("   Coding Agent Terminal");
+Console.WriteLine("   Coding Agent Terminal (Kernel Process)");
 Console.WriteLine("===========================================");
-Console.WriteLine($"Session ID: {agent.SessionId}");
+Console.WriteLine($"Session ID: {agentSettings.Session.SessionId}");
 Console.WriteLine();
 Console.WriteLine("Type your instructions and press Enter.");
 Console.WriteLine("Type 'exit' to quit, 'status' for status.");
@@ -112,12 +151,10 @@ while (true)
 
     if (input.Equals("status", StringComparison.OrdinalIgnoreCase))
     {
-        var status = await agent.GetStatusAsync();
+        var status = await orchestrationService.GetStatusAsync();
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine($"Status: {status.State}");
-        Console.WriteLine($"Activity: {status.CurrentActivity}");
-        Console.WriteLine($"Execution Time: {status.ExecutionTime}");
+        Console.WriteLine($"Status: {status}");
         Console.ResetColor();
         Console.WriteLine();
         continue;
@@ -130,33 +167,40 @@ while (true)
         Console.WriteLine("Agent: Processing your request...");
         Console.ResetColor();
 
-        // Execute the instruction
-        await agent.ExecuteInstructionAsync(input);
+        // Execute the instruction using the orchestration service
+        var result = await orchestrationService.ProcessInstructionAsync(input);
 
-        // Get the conversation history to show the response
-        var sessionStore = scope.ServiceProvider.GetRequiredService<ISessionStore>();
-        var messages = await sessionStore.GetConversationHistoryAsync(10, 1);
+        // Display the summary result
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("Agent:");
+        Console.ResetColor();
+        Console.WriteLine(result.Summary);
 
-        // Find the last assistant message
-        var lastAssistantMessage = messages
-            .Where(m => m.Role == "assistant")
-            .OrderByDescending(m => m.Timestamp)
-            .FirstOrDefault();
-
-        if (lastAssistantMessage != null)
+        // Show key findings if available (for research questions)
+        if (result.KeyFindings != null && result.KeyFindings.Any())
         {
             Console.WriteLine();
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("Agent:");
+            foreach (var finding in result.KeyFindings)
+            {
+                Console.WriteLine(finding);
+            }
+        }
+
+        // Show metrics if available
+        if (result.Metrics != null)
+        {
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine($"Steps: {result.Metrics.StepsCompleted}/{result.Metrics.StepsTotal} | Success Rate: {result.Metrics.SuccessRate}");
             Console.ResetColor();
-            Console.WriteLine(lastAssistantMessage.Content);
         }
 
         // Show status
-        var status = await agent.GetStatusAsync();
+        var status = await orchestrationService.GetStatusAsync();
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($"[{status.State}] {status.CurrentActivity}");
+        Console.WriteLine($"[{status}]");
         Console.ResetColor();
     }
     catch (Exception ex)

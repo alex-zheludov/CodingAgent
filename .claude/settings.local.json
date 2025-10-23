@@ -11,7 +11,8 @@
       "Bash(dir /B)",
       "Bash(dotnet sln add src/CodingAgent.Core/CodingAgent.Core.csproj)",
       "Bash(dotnet sln add src/CodingAgent.Api/CodingAgent.Api.csproj)",
-      "Bash(dotnet sln add src/CodingAgent.Terminal/CodingAgent.Terminal.csproj)"
+      "Bash(dotnet sln add src/CodingAgent.Terminal/CodingAgent.Terminal.csproj)",
+      "Bash(dir \"c:\\Code\\Personal\\CodingAgent\\Test-Repo\")"
     ],
     "deny": [],
     "ask": []
