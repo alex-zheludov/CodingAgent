@@ -9,6 +9,7 @@ public class SummaryResult
     public SummaryMetrics? Metrics { get; set; }
     public List<string> NextSteps { get; set; } = new();
     public List<string> FilesReferenced { get; set; } = new();
+    public ExecutionPlan? Plan { get; set; }
 }
 
 public class FileChanges

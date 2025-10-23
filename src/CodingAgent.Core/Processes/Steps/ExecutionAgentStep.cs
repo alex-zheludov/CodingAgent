@@ -42,6 +42,9 @@ public class ExecutionAgentStep : KernelProcessStep
 
         var results = new List<StepResult>();
 
+        // Build workspace context information
+        var workspaceInfo = BuildWorkspaceInfo(input.WorkspaceContext);
+
         foreach (var step in input.Plan.Steps.OrderBy(s => s.StepId))
         {
             var dependenciesMet = step.Dependencies.All(depId =>
@@ -61,7 +64,7 @@ public class ExecutionAgentStep : KernelProcessStep
             _logger.LogInformation("Executing step {StepId}: {Action}", step.StepId, step.Action);
 
             var startTime = DateTime.UtcNow;
-            var result = await ExecuteStepAsync(step);
+            var result = await ExecuteStepAsync(step, workspaceInfo);
             result.ExecutionTime = DateTime.UtcNow - startTime;
 
             results.Add(result);
@@ -85,14 +88,19 @@ public class ExecutionAgentStep : KernelProcessStep
         return results;
     }
 
-    private async Task<StepResult> ExecuteStepAsync(PlanStep step)
+    private async Task<StepResult> ExecuteStepAsync(PlanStep step, string workspaceInfo)
     {
         var systemPrompt = $"""
+            {workspaceInfo}
+
             Execute this step:
             {step.Description}
 
             Expected outcome: {step.ExpectedOutcome}
             Tools available: {string.Join(", ", step.Tools)}
+
+            IMPORTANT: Only use tools and technologies that match the project type above.
+            For example, if the project is C#/.NET, do NOT create Python files.
 
             Execute the step and end with <STEP COMPLETE>
             """;
@@ -115,10 +123,28 @@ public class ExecutionAgentStep : KernelProcessStep
         {
             for (int iteration = 0; iteration < maxIterations; iteration++)
             {
-                var response = await _chatService!.GetChatMessageContentAsync(
-                    chatHistory,
-                    executionSettings: executionSettings,
-                    kernel: _kernel);
+                ChatMessageContent response;
+                try
+                {
+                    response = await _chatService!.GetChatMessageContentAsync(
+                        chatHistory,
+                        executionSettings: executionSettings,
+                        kernel: _kernel);
+                }
+                catch (HttpOperationException httpEx)
+                    when (httpEx.Message.Contains("429") || httpEx.Message.Contains("RateLimitReached"))
+                {
+                    // Rate limit hit - extract retry delay from error message
+                    var retryAfter = ExtractRetryAfter(httpEx.Message);
+                    _logger.LogWarning("Rate limit hit. Retrying after {Seconds} seconds...", retryAfter);
+                    await Task.Delay(TimeSpan.FromSeconds(retryAfter));
+
+                    // Retry the request
+                    response = await _chatService!.GetChatMessageContentAsync(
+                        chatHistory,
+                        executionSettings: executionSettings,
+                        kernel: _kernel);
+                }
 
                 var content = response.Content ?? "";
                 chatHistory.AddAssistantMessage(content);
@@ -162,5 +188,83 @@ public class ExecutionAgentStep : KernelProcessStep
                 }
             };
         }
+    }
+
+    private static string BuildWorkspaceInfo(WorkspaceContext workspaceContext)
+    {
+        var lines = new List<string> { "=== WORKSPACE CONTEXT ===" };
+
+        foreach (var (repoName, repoInfo) in workspaceContext.Repositories)
+        {
+            lines.Add($"Repository: {repoName}");
+
+            // Detect project type
+            var projectType = DetectProjectType(repoInfo);
+            if (!string.IsNullOrEmpty(projectType))
+            {
+                lines.Add($"  Project Type: {projectType}");
+            }
+
+            // Add file types
+            if (repoInfo.FilesByExtension.Count > 0)
+            {
+                var topExtensions = repoInfo.FilesByExtension
+                    .OrderByDescending(x => x.Value)
+                    .Take(3)
+                    .Select(x => $"{x.Key}");
+                lines.Add($"  Main file types: {string.Join(", ", topExtensions)}");
+            }
+
+            // Test project detection
+            var hasTestProject = repoInfo.KeyFiles.Any(f =>
+                f.Contains("test", StringComparison.OrdinalIgnoreCase) ||
+                f.Contains(".test.", StringComparison.OrdinalIgnoreCase));
+
+            if (!hasTestProject)
+            {
+                lines.Add($"  ⚠️ NO TEST PROJECTS - Do not attempt to run tests (dotnet test, npm test, etc.)");
+            }
+        }
+
+        lines.Add("========================");
+        return string.Join("\n", lines);
+    }
+
+    private static string DetectProjectType(RepositoryInfo repoInfo)
+    {
+        if (repoInfo.FilesByExtension.ContainsKey(".cs") || repoInfo.FilesByExtension.ContainsKey(".csproj"))
+            return "C# / .NET";
+
+        if (repoInfo.FilesByExtension.ContainsKey(".py"))
+            return "Python";
+
+        if (repoInfo.FilesByExtension.ContainsKey(".js") || repoInfo.FilesByExtension.ContainsKey(".ts"))
+            return "JavaScript/TypeScript";
+
+        if (repoInfo.FilesByExtension.ContainsKey(".java"))
+            return "Java";
+
+        if (repoInfo.FilesByExtension.ContainsKey(".go"))
+            return "Go";
+
+        return string.Empty;
+    }
+
+    private static int ExtractRetryAfter(string errorMessage)
+    {
+        // Try to extract the "retry after X seconds" from the error message
+        // Message format: "...Please retry after 3 seconds..."
+        var match = System.Text.RegularExpressions.Regex.Match(
+            errorMessage,
+            @"retry after (\d+) second",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var seconds))
+        {
+            return seconds;
+        }
+
+        // Default to 5 seconds if we can't extract the value
+        return 5;
     }
 }
