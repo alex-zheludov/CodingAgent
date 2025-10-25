@@ -35,12 +35,14 @@ public class PlanningAgentStep : KernelProcessStep
     }
 
     [KernelFunction(Functions.CreatePlan)]
-    public async Task<ExecutionPlan> CreatePlanAsync(KernelProcessStepContext context, PlanningInput input)
+    public async Task<ExecutionPlan> CreatePlanAsync(KernelProcessStepContext context, EnrichedPlanningInput input)
     {
         _kernel ??= _kernelFactory.CreateKernel(AgentCapability.Planning);
         _chatService ??= _kernel.GetRequiredService<IChatCompletionService>();
 
-        var contextInfo = BuildContextInfo(input.WorkspaceContext);
+        // Use pre-built context summary from ContextAgent
+        var contextInfo = string.Join("\n", input.EnrichedContexts.Values
+            .Select(ec => ec.PlanningContextSummary));
 
         var systemPrompt = $$"""
             You are a planning agent using DeepSeek R1. Create detailed execution plans.
@@ -158,10 +160,11 @@ public class PlanningAgentStep : KernelProcessStep
             _logger.LogInformation("=====================");
 
             // Create ExecutionInput for the next step
-            var executionInput = new ExecutionInput
+            var executionInput = new EnrichedExecutionInput
             {
                 Plan = plan,
-                WorkspaceContext = input.WorkspaceContext
+                WorkspaceContext = input.WorkspaceContext,
+                EnrichedContexts = input.EnrichedContexts
             };
 
             await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.PlanReady, Data = executionInput });
@@ -191,78 +194,16 @@ public class PlanningAgentStep : KernelProcessStep
             };
 
             // Create ExecutionInput for the fallback plan
-            var fallbackExecutionInput = new ExecutionInput
+            var fallbackExecutionInput = new EnrichedExecutionInput
             {
                 Plan = fallbackPlan,
-                WorkspaceContext = input.WorkspaceContext
+                WorkspaceContext = input.WorkspaceContext,
+                EnrichedContexts = input.EnrichedContexts
             };
 
             await context.EmitEventAsync(new KernelProcessEvent { Id = OutputEvents.PlanReady, Data = fallbackExecutionInput });
 
             return fallbackPlan;
         }
-    }
-
-    private string BuildContextInfo(WorkspaceContext workspaceContext)
-    {
-        var lines = new List<string> { "Workspace:" };
-        foreach (var (repoName, repoInfo) in workspaceContext.Repositories)
-        {
-            lines.Add($"  {repoName}: {repoInfo.TotalFiles} files");
-
-            // Add file type information
-            if (repoInfo.FilesByExtension.Any())
-            {
-                var topExtensions = repoInfo.FilesByExtension
-                    .OrderByDescending(x => x.Value)
-                    .Take(5)
-                    .Select(x => $"{x.Key} ({x.Value})");
-                lines.Add($"    File types: {string.Join(", ", topExtensions)}");
-            }
-
-            // Add key files information
-            if (repoInfo.KeyFiles.Any())
-            {
-                lines.Add($"    Key files: {string.Join(", ", repoInfo.KeyFiles.Take(10))}");
-            }
-
-            // Detect project type and testing setup
-            var hasTestProject = repoInfo.KeyFiles.Any(f =>
-                f.Contains("test", StringComparison.OrdinalIgnoreCase) ||
-                f.Contains(".test.", StringComparison.OrdinalIgnoreCase));
-
-            var projectType = DetectProjectType(repoInfo);
-
-            if (!string.IsNullOrEmpty(projectType))
-            {
-                lines.Add($"    Project Type: {projectType}");
-            }
-
-            if (!hasTestProject)
-            {
-                lines.Add($"    ⚠️ No test projects detected - DO NOT suggest running tests");
-            }
-        }
-        return string.Join("\n", lines);
-    }
-
-    private string DetectProjectType(RepositoryInfo repoInfo)
-    {
-        if (repoInfo.FilesByExtension.ContainsKey(".cs") || repoInfo.FilesByExtension.ContainsKey(".csproj"))
-            return "C# / .NET";
-
-        if (repoInfo.FilesByExtension.ContainsKey(".py"))
-            return "Python";
-
-        if (repoInfo.FilesByExtension.ContainsKey(".js") || repoInfo.FilesByExtension.ContainsKey(".ts"))
-            return "JavaScript/TypeScript";
-
-        if (repoInfo.FilesByExtension.ContainsKey(".java"))
-            return "Java";
-
-        if (repoInfo.FilesByExtension.ContainsKey(".go"))
-            return "Go";
-
-        return string.Empty;
     }
 }

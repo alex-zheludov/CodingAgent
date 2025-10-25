@@ -1,5 +1,4 @@
-﻿using CodingAgent.Agents;
-using CodingAgent.Configuration;
+﻿using CodingAgent.Configuration;
 using CodingAgent.Configuration.Validators;
 using CodingAgent.Data;
 using CodingAgent.Extensions;

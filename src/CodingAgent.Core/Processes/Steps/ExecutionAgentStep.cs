@@ -35,15 +35,16 @@ public class ExecutionAgentStep : KernelProcessStep
     }
 
     [KernelFunction(Functions.ExecutePlan)]
-    public async Task<List<StepResult>> ExecutePlanAsync(KernelProcessStepContext context, ExecutionInput input)
+    public async Task<List<StepResult>> ExecutePlanAsync(KernelProcessStepContext context, EnrichedExecutionInput input)
     {
         _kernel ??= _kernelFactory.CreateKernel(AgentCapability.Execution);
         _chatService ??= _kernel.GetRequiredService<IChatCompletionService>();
 
         var results = new List<StepResult>();
 
-        // Build workspace context information
-        var workspaceInfo = BuildWorkspaceInfo(input.WorkspaceContext);
+        // Use pre-built context summary from ContextAgent
+        var workspaceInfo = string.Join("\n", input.EnrichedContexts.Values
+            .Select(ec => ec.ExecutionContextSummary));
 
         foreach (var step in input.Plan.Steps.OrderBy(s => s.StepId))
         {
@@ -188,66 +189,6 @@ public class ExecutionAgentStep : KernelProcessStep
                 }
             };
         }
-    }
-
-    private static string BuildWorkspaceInfo(WorkspaceContext workspaceContext)
-    {
-        var lines = new List<string> { "=== WORKSPACE CONTEXT ===" };
-
-        foreach (var (repoName, repoInfo) in workspaceContext.Repositories)
-        {
-            lines.Add($"Repository: {repoName}");
-
-            // Detect project type
-            var projectType = DetectProjectType(repoInfo);
-            if (!string.IsNullOrEmpty(projectType))
-            {
-                lines.Add($"  Project Type: {projectType}");
-            }
-
-            // Add file types
-            if (repoInfo.FilesByExtension.Count > 0)
-            {
-                var topExtensions = repoInfo.FilesByExtension
-                    .OrderByDescending(x => x.Value)
-                    .Take(3)
-                    .Select(x => $"{x.Key}");
-                lines.Add($"  Main file types: {string.Join(", ", topExtensions)}");
-            }
-
-            // Test project detection
-            var hasTestProject = repoInfo.KeyFiles.Any(f =>
-                f.Contains("test", StringComparison.OrdinalIgnoreCase) ||
-                f.Contains(".test.", StringComparison.OrdinalIgnoreCase));
-
-            if (!hasTestProject)
-            {
-                lines.Add($"  ⚠️ NO TEST PROJECTS - Do not attempt to run tests (dotnet test, npm test, etc.)");
-            }
-        }
-
-        lines.Add("========================");
-        return string.Join("\n", lines);
-    }
-
-    private static string DetectProjectType(RepositoryInfo repoInfo)
-    {
-        if (repoInfo.FilesByExtension.ContainsKey(".cs") || repoInfo.FilesByExtension.ContainsKey(".csproj"))
-            return "C# / .NET";
-
-        if (repoInfo.FilesByExtension.ContainsKey(".py"))
-            return "Python";
-
-        if (repoInfo.FilesByExtension.ContainsKey(".js") || repoInfo.FilesByExtension.ContainsKey(".ts"))
-            return "JavaScript/TypeScript";
-
-        if (repoInfo.FilesByExtension.ContainsKey(".java"))
-            return "Java";
-
-        if (repoInfo.FilesByExtension.ContainsKey(".go"))
-            return "Go";
-
-        return string.Empty;
     }
 
     private static int ExtractRetryAfter(string errorMessage)

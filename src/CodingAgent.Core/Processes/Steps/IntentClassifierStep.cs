@@ -57,8 +57,7 @@ public class IntentClassifierStep : KernelProcessStep
             {
               "intent": "QUESTION" | "TASK" | "GREETING" | "UNCLEAR",
               "confidence": 0.0-1.0,
-              "reasoning": "brief explanation",
-              "suggestedAgent": "ResearchAgent" | "PlanningAgent" | "SimpleReply"
+              "reasoning": "brief explanation"
             }
             """;
 
@@ -81,7 +80,7 @@ public class IntentClassifierStep : KernelProcessStep
 
             _logger.LogInformation("Intent: {Intent} (Confidence: {Confidence})", result.Intent, result.Confidence);
 
-            // Emit appropriate event based on intent with the correct data type
+            // Emit the appropriate event based on intent with the correct data type
             switch (result.Intent)
             {
                 case IntentType.Question:

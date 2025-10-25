@@ -1,4 +1,3 @@
-using CodingAgent.Agents;
 using CodingAgent.Configuration;
 using CodingAgent.Configuration.Validators;
 using CodingAgent.Data;
@@ -10,10 +9,29 @@ using CodingAgent.Services;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticKernel.ChatCompletion;
 using Scalar.AspNetCore;
+using Serilog;
+using Serilog.Events;
+
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File("logs/codingagent-api-.txt",
+        rollingInterval: RollingInterval.Day,
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Use Serilog for logging
+builder.Services.AddSerilog();
+
+// Add user secrets support
+builder.Configuration.AddUserSecrets<Program>();
 
 // Add configuration with validation
 
@@ -62,8 +80,9 @@ builder.Services.AddSingleton<IGitService, GitService>();
 builder.Services.AddSingleton<ISecurityService, SecurityService>();
 builder.Services.AddSingleton<IInitializationService, InitializationService>();
 builder.Services.AddScoped<ISessionStore, SessionStore>();
+builder.Services.AddSingleton<RepositoryContextBuilder>();
 
-// Add plugins (required by AgentOrchestrator)
+// Add plugins (required by CodingAgent)
 builder.Services.AddScoped<FileOpsPlugin>();
 builder.Services.AddScoped<GitPlugin>();
 builder.Services.AddScoped<CommandPlugin>();
@@ -77,15 +96,13 @@ builder.Services.AddSingleton(sp =>
     return workspaceContext;
 });
 
-// Add orchestrator (depends on plugins and workspace context)
-builder.Services.AddScoped<ICodingAgent, CodingAgent.Agents.CodingCodingAgent>();
-
 // Add Multi-Agent Orchestration Services
 builder.Services.AddSingleton<IKernelFactory, KernelFactory>();
 builder.Services.AddScoped<IOrchestrationService, OrchestrationService>();
 
 // Register Process Steps
 builder.Services.AddTransient<IntentClassifierStep>();
+builder.Services.AddTransient<ContextAgentStep>();
 builder.Services.AddTransient<ResearchAgentStep>();
 builder.Services.AddTransient<PlanningAgentStep>();
 builder.Services.AddTransient<ExecutionAgentStep>();
@@ -100,10 +117,11 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 // Run initialization at startup
-// Note: InitializationService is a singleton, but it internally creates a scope
-// to resolve scoped dependencies like ISessionStore for database initialization
 var initService = app.Services.GetRequiredService<IInitializationService>();
 workspaceContext = await initService.InitializeAsync();
+
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+logger.LogInformation("CodingAgent API initialized and ready");
 
 // Configure middleware
 if (app.Environment.IsDevelopment())

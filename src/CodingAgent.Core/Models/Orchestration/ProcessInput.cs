@@ -48,6 +48,16 @@ public class ExecutionInput
 }
 
 /// <summary>
+/// Enriched execution input with pre-built context
+/// </summary>
+public class EnrichedExecutionInput
+{
+    public ExecutionPlan Plan { get; set; } = null!;
+    public WorkspaceContext WorkspaceContext { get; set; } = null!;
+    public Dictionary<string, EnrichedRepositoryContext> EnrichedContexts { get; set; } = new();
+}
+
+/// <summary>
 /// Input for summary step (research)
 /// </summary>
 public class SummaryResearchInput

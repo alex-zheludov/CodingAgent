@@ -1,4 +1,3 @@
-using CodingAgent.Agents;
 using CodingAgent.Models;
 using CodingAgent.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -15,11 +14,7 @@ public class AgentEndpoints : IEndpointDefinition
 
         group.MapPost("/execute", ExecuteTaskAsync)
             .WithName("ExecuteTask")
-            .WithDescription("Submit initial task instruction to the agent");
-
-        group.MapPost("/message", SendMessageAsync)
-            .WithName("SendMessage")
-            .WithDescription("Send follow-up message to the agent");
+            .WithDescription("Execute a task instruction using the agent orchestration");
 
         group.MapGet("/status", GetStatusAsync)
             .WithName("GetStatus")
@@ -28,14 +23,6 @@ public class AgentEndpoints : IEndpointDefinition
         group.MapGet("/conversation", GetConversationAsync)
             .WithName("GetConversation")
             .WithDescription("Get conversation history");
-
-        group.MapGet("/health", GetHealthAsync)
-            .WithName("HealthCheck")
-            .WithDescription("Health check endpoint");
-
-        group.MapPost("/stop", StopAgentAsync)
-            .WithName("StopAgent")
-            .WithDescription("Stop/pause the agent");
     }
 
     private static async Task<IResult> ExecuteTaskAsync(
@@ -66,34 +53,11 @@ public class AgentEndpoints : IEndpointDefinition
         }
     }
 
-    private static async Task<IResult> SendMessageAsync(
-        [FromBody] MessageRequest request,
-        [FromServices] ICodingAgent orchestrator,
-        [FromServices] ILogger<AgentEndpoints> logger)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(request.Message))
-            {
-                return Results.BadRequest(new { error = "Message is required" });
-            }
-
-            await orchestrator.SendMessageAsync(request.Message);
-
-            return Results.Ok(new { success = true, message = "Message sent" });
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error sending message");
-            return Results.Problem(ex.Message);
-        }
-    }
-
     private static async Task<IResult> GetStatusAsync(
         [FromServices] IOrchestrationService orchestrationService)
     {
         var status = await orchestrationService.GetStatusAsync();
-        return Results.Ok(new { status });
+        return Results.Ok(new { status = status.ToString() });
     }
 
     private static async Task<IResult> GetConversationAsync(
@@ -112,19 +76,5 @@ public class AgentEndpoints : IEndpointDefinition
             TotalCount: totalCount,
             PageSize: pageSize,
             PageNumber: pageNumber));
-    }
-
-    private static async Task<IResult> GetHealthAsync(
-        [FromServices] ICodingAgent orchestrator)
-    {
-        var health = await orchestrator.GetHealthAsync();
-        return Results.Ok(health);
-    }
-
-    private static async Task<IResult> StopAgentAsync(
-        [FromServices] ICodingAgent orchestrator)
-    {
-        await orchestrator.StopAsync();
-        return Results.Ok(new { success = true, message = "Agent stopped" });
     }
 }
