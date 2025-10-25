@@ -80,7 +80,6 @@ builder.Services.AddSingleton<IGitService, GitService>();
 builder.Services.AddSingleton<ISecurityService, SecurityService>();
 builder.Services.AddSingleton<IInitializationService, InitializationService>();
 builder.Services.AddScoped<ISessionStore, SessionStore>();
-builder.Services.AddSingleton<RepositoryContextBuilder>();
 
 // Add plugins (required by CodingAgent)
 builder.Services.AddScoped<FileOpsPlugin>();
