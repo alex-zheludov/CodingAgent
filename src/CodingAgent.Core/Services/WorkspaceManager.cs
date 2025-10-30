@@ -149,10 +149,9 @@ public class WorkspaceManager : IWorkspaceManager
             var ext = Path.GetExtension(file).ToLowerInvariant();
             if (string.IsNullOrEmpty(ext)) ext = "(no extension)";
 
-            if (!info.FilesByExtension.ContainsKey(ext))
-                info.FilesByExtension[ext] = 0;
-
-            info.FilesByExtension[ext]++;
+            if (!info.FilesByExtension.TryGetValue(ext, out var count))
+                count = 0;
+            info.FilesByExtension[ext] = count + 1;
         }
 
         // Find key files
