@@ -44,11 +44,17 @@ public class RepositoryConfigValidator : AbstractValidator<RepositoryConfig>
             .Must(BeValidDirectoryName)
             .WithMessage("Repository Name contains invalid characters");
 
+        RuleFor(x => x)
+            .Must(HaveEitherUrlOrLocalPath)
+            .WithMessage("Repository must have either Url or LocalPath specified, but not both");
+
         RuleFor(x => x.Url)
-            .NotEmpty()
-            .WithMessage("Repository Url is required")
-            .Must(url => url.StartsWith("git@"))
-            .WithMessage("Repository URL must be SSH format (git@...)");
+            .Must(url => string.IsNullOrEmpty(url) || url.StartsWith("git@"))
+            .WithMessage("Repository URL must be SSH format (git@...) when provided");
+
+        RuleFor(x => x.LocalPath)
+            .Must(path => string.IsNullOrEmpty(path) || Path.IsPathRooted(path))
+            .WithMessage("Repository LocalPath must be an absolute path when provided");
 
         RuleFor(x => x.Branch)
             .NotEmpty()
@@ -59,6 +65,13 @@ public class RepositoryConfigValidator : AbstractValidator<RepositoryConfig>
     {
         var invalidChars = Path.GetInvalidFileNameChars();
         return !name.Any(c => invalidChars.Contains(c));
+    }
+
+    private bool HaveEitherUrlOrLocalPath(RepositoryConfig config)
+    {
+        var hasUrl = !string.IsNullOrEmpty(config.Url);
+        var hasLocalPath = !string.IsNullOrEmpty(config.LocalPath);
+        return (hasUrl && !hasLocalPath) || (!hasUrl && hasLocalPath);
     }
 }
 

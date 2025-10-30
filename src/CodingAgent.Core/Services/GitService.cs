@@ -97,7 +97,8 @@ public class GitService : IGitService
 
         foreach (var repo in _agentSettings.Repositories)
         {
-            var success = await CloneRepositoryAsync(repo.Name, repo.Url, repo.Branch);
+            var url = repo.Url ?? string.Empty;
+            var success = await CloneRepositoryAsync(repo.Name, url, repo.Branch);
             results[repo.Name] = success;
         }
 
@@ -108,7 +109,22 @@ public class GitService : IGitService
     {
         try
         {
+            var repoConfig = _agentSettings.Repositories.FirstOrDefault(r => r.Name == name);
             var repoPath = _workspaceManager.GetRepositoryPath(name);
+
+            if (repoConfig?.LocalPath != null)
+            {
+                if (Directory.Exists(repoPath))
+                {
+                    _logger.LogInformation("Using local repository {Name} at {Path}", name, repoPath);
+                    return true;
+                }
+                else
+                {
+                    _logger.LogError("Local repository path does not exist: {Path}", repoPath);
+                    return false;
+                }
+            }
 
             if (Directory.Exists(repoPath))
             {
@@ -118,7 +134,6 @@ public class GitService : IGitService
 
             _logger.LogInformation("Cloning repository {Name} from {Url}", name, url);
 
-            // Use system git command instead of LibGit2Sharp for cloning (better SSH support)
             var success = await CloneUsingGitCommandAsync(url, repoPath, branch);
 
             if (success)

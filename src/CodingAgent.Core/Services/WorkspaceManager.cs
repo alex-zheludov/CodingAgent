@@ -74,6 +74,13 @@ public class WorkspaceManager : IWorkspaceManager
 
     public string GetRepositoryPath(string repositoryName)
     {
+        // Check if this repository has a LocalPath configured
+        var repoConfig = _agentSettings.Repositories.FirstOrDefault(r => r.Name == repositoryName);
+        if (repoConfig?.LocalPath != null)
+        {
+            return Path.GetFullPath(repoConfig.LocalPath);
+        }
+
         var repoPath = Path.Combine(_workspaceRoot, repositoryName);
         return Path.GetFullPath(repoPath);
     }
