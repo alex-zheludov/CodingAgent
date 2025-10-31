@@ -49,8 +49,8 @@ public class RepositoryConfigValidator : AbstractValidator<RepositoryConfig>
             .WithMessage("Repository must have either Url or LocalPath specified, but not both");
 
         RuleFor(x => x.Url)
-            .Must(url => string.IsNullOrEmpty(url) || url.StartsWith("git@"))
-            .WithMessage("Repository URL must be SSH format (git@...) when provided");
+            .Must(url => string.IsNullOrEmpty(url) || url.StartsWith("git@") || url.StartsWith("https://"))
+            .WithMessage("Repository URL must be SSH format (git@...) or HTTPS format (https://...) when provided");
 
         RuleFor(x => x.LocalPath)
             .Must(path => string.IsNullOrEmpty(path) || Path.IsPathRooted(path))
