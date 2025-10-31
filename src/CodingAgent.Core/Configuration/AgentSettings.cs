@@ -16,7 +16,8 @@ public class AgentSettings
 public class RepositoryConfig
 {
     public string Name { get; set; } = string.Empty;
-    public string Url { get; set; } = string.Empty;
+    public string? Url { get; set; }
+    public string? LocalPath { get; set; }
     public string Branch { get; set; } = string.Empty;
 }
 
