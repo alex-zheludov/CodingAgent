@@ -1,5 +1,4 @@
 using CodingAgent.Services;
-using Microsoft.SemanticKernel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
@@ -23,8 +22,7 @@ public class CommandPlugin
         _logger = logger;
     }
 
-    [KernelFunction]
-    [Description("Execute a whitelisted shell command in a repository directory")]
+        [Description("Execute a whitelisted shell command in a repository directory")]
     public async Task<string> ExecuteCommandAsync(
         [Description("The command to execute (must be whitelisted)")] string command,
         [Description("The repository name to execute in")] string repositoryName,
@@ -132,32 +130,28 @@ public class CommandPlugin
         }
     }
 
-    [KernelFunction]
-    [Description("Run dotnet build in a repository")]
+        [Description("Run dotnet build in a repository")]
     public async Task<string> BuildDotnetAsync(
         [Description("The repository name to build")] string repositoryName)
     {
         return await ExecuteCommandAsync("dotnet build", repositoryName);
     }
 
-    [KernelFunction]
-    [Description("Run dotnet test in a repository")]
+        [Description("Run dotnet test in a repository")]
     public async Task<string> TestDotnetAsync(
         [Description("The repository name to test")] string repositoryName)
     {
         return await ExecuteCommandAsync("dotnet test", repositoryName);
     }
 
-    [KernelFunction]
-    [Description("Run npm install in a repository")]
+        [Description("Run npm install in a repository")]
     public async Task<string> NpmInstallAsync(
         [Description("The repository name")] string repositoryName)
     {
         return await ExecuteCommandAsync("npm install", repositoryName);
     }
 
-    [KernelFunction]
-    [Description("Run npm test in a repository")]
+        [Description("Run npm test in a repository")]
     public async Task<string> NpmTestAsync(
         [Description("The repository name")] string repositoryName)
     {

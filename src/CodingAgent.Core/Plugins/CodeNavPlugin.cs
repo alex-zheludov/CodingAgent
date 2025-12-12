@@ -1,5 +1,4 @@
 using CodingAgent.Services;
-using Microsoft.SemanticKernel;
 using System.ComponentModel;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -22,7 +21,6 @@ public class CodeNavPlugin
         _logger = logger;
     }
 
-    [KernelFunction]
     [Description("Get an overview of the workspace structure including all repositories and key files")]
     public async Task<string> GetWorkspaceOverviewAsync()
     {
@@ -71,7 +69,6 @@ public class CodeNavPlugin
         }
     }
 
-    [KernelFunction]
     [Description("Get a directory tree structure for a repository")]
     public async Task<string> GetDirectoryTreeAsync(
         [Description("The repository name")] string repositoryName,
@@ -106,7 +103,6 @@ public class CodeNavPlugin
         }
     }
 
-    [KernelFunction]
     [Description("Search for code patterns or text across files in the workspace")]
     public async Task<string> SearchCodeAsync(
         [Description("The regex pattern or text to search for")] string searchPattern,
@@ -183,7 +179,6 @@ public class CodeNavPlugin
         }
     }
 
-    [KernelFunction]
     [Description("Find class or interface definitions in code files")]
     public async Task<string> FindDefinitionsAsync(
         [Description("The name of the class, interface, or method to find")] string definitionName,

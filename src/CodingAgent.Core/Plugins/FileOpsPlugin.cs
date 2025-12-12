@@ -1,5 +1,4 @@
 using CodingAgent.Services;
-using Microsoft.SemanticKernel;
 using System.ComponentModel;
 
 namespace CodingAgent.Plugins;
@@ -20,7 +19,6 @@ public class FileOpsPlugin
         _logger = logger;
     }
 
-    [KernelFunction]
     [Description("Read the contents of a file from the workspace")]
     public async Task<string> ReadFileAsync(
         [Description("The path to the file relative to workspace root")] string filePath)
@@ -63,7 +61,6 @@ public class FileOpsPlugin
         }
     }
 
-    [KernelFunction]
     [Description("Write content to a file in the workspace")]
     public async Task<string> WriteFileAsync(
         [Description("The path to the file relative to workspace root")] string filePath,
@@ -108,7 +105,6 @@ public class FileOpsPlugin
         }
     }
 
-    [KernelFunction]
     [Description("List files and directories in a directory")]
     public async Task<string> ListDirectoryAsync(
         [Description("The directory path relative to workspace root")] string directoryPath,
@@ -161,7 +157,6 @@ public class FileOpsPlugin
         }
     }
 
-    [KernelFunction]
     [Description("Search for files by name pattern across the workspace")]
     public async Task<string> FindFilesAsync(
         [Description("File name pattern to search for (e.g., *.cs, Program.cs)")] string pattern)
