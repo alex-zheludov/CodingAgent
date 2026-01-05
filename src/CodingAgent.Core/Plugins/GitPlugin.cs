@@ -1,5 +1,4 @@
 using CodingAgent.Services;
-using Microsoft.SemanticKernel;
 using System.ComponentModel;
 using System.Text;
 
@@ -16,8 +15,7 @@ public class GitPlugin
         _logger = logger;
     }
 
-    [KernelFunction]
-    [Description("Get the status of a Git repository showing modified, staged, and untracked files")]
+        [Description("Get the status of a Git repository showing modified, staged, and untracked files")]
     public async Task<string> GetStatusAsync(
         [Description("The name of the repository")] string repositoryName)
     {
@@ -73,8 +71,7 @@ public class GitPlugin
         }
     }
 
-    [KernelFunction]
-    [Description("Get the diff of changes in a repository")]
+        [Description("Get the diff of changes in a repository")]
     public async Task<string> GetDiffAsync(
         [Description("The name of the repository")] string repositoryName,
         [Description("Optional: specific file path to show diff for")] string? filePath = null)
@@ -92,8 +89,7 @@ public class GitPlugin
         }
     }
 
-    [KernelFunction]
-    [Description("Stage files for commit in a repository")]
+        [Description("Stage files for commit in a repository")]
     public async Task<string> StageFilesAsync(
         [Description("The name of the repository")] string repositoryName,
         [Description("Comma-separated list of file paths to stage")] string filePaths)
@@ -112,8 +108,7 @@ public class GitPlugin
         }
     }
 
-    [KernelFunction]
-    [Description("Create a commit with staged changes")]
+        [Description("Create a commit with staged changes")]
     public async Task<string> CommitAsync(
         [Description("The name of the repository")] string repositoryName,
         [Description("The commit message")] string message)
@@ -131,8 +126,7 @@ public class GitPlugin
         }
     }
 
-    [KernelFunction]
-    [Description("Create and checkout a new branch")]
+        [Description("Create and checkout a new branch")]
     public async Task<string> CreateBranchAsync(
         [Description("The name of the repository")] string repositoryName,
         [Description("The branch name (prefix will be added automatically)")] string branchName)
@@ -150,8 +144,7 @@ public class GitPlugin
         }
     }
 
-    [KernelFunction]
-    [Description("Push commits to remote repository")]
+        [Description("Push commits to remote repository")]
     public async Task<string> PushAsync(
         [Description("The name of the repository")] string repositoryName)
     {
@@ -168,8 +161,7 @@ public class GitPlugin
         }
     }
 
-    [KernelFunction]
-    [Description("Get recent commit history")]
+        [Description("Get recent commit history")]
     public async Task<string> GetCommitHistoryAsync(
         [Description("The name of the repository")] string repositoryName,
         [Description("Number of commits to retrieve (default 10)")] int count = 10)

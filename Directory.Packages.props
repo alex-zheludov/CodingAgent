@@ -5,17 +5,18 @@
   <ItemGroup>
     <!-- ASP.NET Core -->
     <PackageVersion Include="Azure.AI.OpenAI" Version="2.5.0-beta.1" />
+    <PackageVersion Include="Azure.Identity" Version="1.13.2" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.SemanticKernel.Process.Abstractions" Version="1.34.0-alpha" />
-    <PackageVersion Include="Microsoft.SemanticKernel.Process.Core" Version="1.34.0-alpha" />
-    <PackageVersion Include="Microsoft.SemanticKernel.Process.LocalRuntime" Version="1.34.0-alpha" />
     <PackageVersion Include="Polly" Version="8.6.4" />
     <PackageVersion Include="Scalar.AspNetCore" Version="2.9.0" />
-    <!-- Semantic Kernel & AI -->
-    <PackageVersion Include="Microsoft.SemanticKernel" Version="1.66.0" />
-    <PackageVersion Include="Microsoft.SemanticKernel.Connectors.AzureOpenAI" Version="1.66.0" />
-    <PackageVersion Include="Microsoft.Extensions.AI" Version="9.10.0" />
+    <!-- Microsoft Agent Framework -->
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-preview.251204.1" />
+    <PackageVersion Include="Microsoft.Agents.AI.Abstractions" Version="1.0.0-preview.251204.1" />
+    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-preview.251204.1" />
+    <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-preview.251204.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.0.1-preview.1.25571.5" />
     <!-- Database -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0" />

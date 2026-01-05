@@ -9,18 +9,18 @@ public class InitializationService : IInitializationService
 {
     private readonly IWorkspaceManager _workspaceManager;
     private readonly IGitService _gitService;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly ISessionStore _sessionStore;
     private readonly ILogger<InitializationService> _logger;
 
     public InitializationService(
         IWorkspaceManager workspaceManager,
         IGitService gitService,
-        IServiceProvider serviceProvider,
+        ISessionStore sessionStore,
         ILogger<InitializationService> logger)
     {
         _workspaceManager = workspaceManager;
         _gitService = gitService;
-        _serviceProvider = serviceProvider;
+        _sessionStore = sessionStore;
         _logger = logger;
     }
 
@@ -58,10 +58,7 @@ public class InitializationService : IInitializationService
             _logger.LogInformation("Scanned {RepoCount} repositories", context.Repositories.Count);
 
             // Initialize session database
-            // Create scope to resolve scoped ISessionStore (which depends on scoped DbContext)
-            using var scope = _serviceProvider.CreateScope();
-            var sessionStore = scope.ServiceProvider.GetRequiredService<ISessionStore>();
-            await sessionStore.InitializeAsync();
+            await _sessionStore.InitializeAsync();
 
             _logger.LogInformation("Agent initialization complete and ready");
 

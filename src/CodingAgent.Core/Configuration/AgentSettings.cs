@@ -4,8 +4,8 @@ public class AgentSettings
 {
     public const string SectionName = "Agent";
 
-
     public int MaxExecutionMinutes { get; set; } = 30;
+    public int MaxIterationsPerStep { get; set; } = 10;
     public bool AutoCommit { get; set; } = true;
     public bool AutoPush { get; set; } = false;
     public List<RepositoryConfig> Repositories { get; set; } = new();
