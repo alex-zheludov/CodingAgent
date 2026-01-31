@@ -17,13 +17,19 @@ namespace CodingAgent.Core.Workflow.Executors;
 public sealed class IntentClassifierExecutor : Executor<ContextDiscoveryResult, IntentClassificationResult>
 {
     private readonly AIAgent _agent;
+    private readonly ModelSettings _modelSettings;
     private readonly ILogger<IntentClassifierExecutor> _logger;
 
-    public IntentClassifierExecutor(ModelSettings modelSettings, ILogger<IntentClassifierExecutor> logger)
-        : base(nameof(IntentClassifierExecutor))
+    public IntentClassifierExecutor(
+        ModelSettings modelSettings,
+        ILogger<IntentClassifierExecutor> logger,
+        ExecutorOptions? options = null,
+        bool declareCrossRunShareable = false)
+        : base(nameof(IntentClassifierExecutor), options, declareCrossRunShareable)
     {
+        _modelSettings = modelSettings;
         _logger = logger;
-        _agent = CreateAgent(modelSettings);
+        _agent = CreateAgent();
     }
 
     public override async ValueTask<IntentClassificationResult> HandleAsync(
@@ -81,13 +87,13 @@ public sealed class IntentClassifierExecutor : Executor<ContextDiscoveryResult, 
         }
     }
 
-    private static AIAgent CreateAgent(ModelSettings modelSettings)
+    private AIAgent CreateAgent()
     {
         var client = new AzureOpenAIClient(
-            new Uri(modelSettings.Endpoint),
-            new AzureKeyCredential(modelSettings.ApiKey));
+            new Uri(_modelSettings.Endpoint),
+            new AzureKeyCredential(_modelSettings.ApiKey));
 
-        var chatClient = client.GetChatClient(modelSettings.IntentClassifier.Model).AsIChatClient();
+        var chatClient = client.GetChatClient(_modelSettings.IntentClassifier.Model).AsIChatClient();
 
         // Intent classifier needs no tools - pure LLM classification
         return chatClient.CreateAIAgent(

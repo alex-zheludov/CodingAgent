@@ -9,7 +9,16 @@ namespace CodingAgent.Core.Workflow.Executors;
 /// </summary>
 public sealed class SimpleResponseExecutor : Executor<IntentClassificationResult, SummaryResult>
 {
-    public SimpleResponseExecutor() : base(nameof(SimpleResponseExecutor)) { }
+    private readonly ILogger<SimpleResponseExecutor> _logger;
+
+    public SimpleResponseExecutor(
+        ILogger<SimpleResponseExecutor> logger,
+        ExecutorOptions? options = null,
+        bool declareCrossRunShareable = false)
+        : base(nameof(SimpleResponseExecutor), options, declareCrossRunShareable)
+    {
+        _logger = logger;
+    }
 
     public override ValueTask<SummaryResult> HandleAsync(
         IntentClassificationResult message,

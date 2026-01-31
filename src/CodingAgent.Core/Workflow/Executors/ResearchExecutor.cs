@@ -16,21 +16,31 @@ namespace CodingAgent.Core.Workflow.Executors;
 public sealed class ResearchExecutor : Executor<IntentClassificationResult, SummaryResult>
 {
     private readonly AIAgent _agent;
-    private readonly AgentSettings _settings;
+    private readonly ModelSettings _modelSettings;
+    private readonly AgentSettings _agentSettings;
     private readonly ILogger<ResearchExecutor> _logger;
+    private readonly IFileOperationsPlugin _fileOperations;
+    private readonly ICodeNavigationPlugin _codeNavigation;
+    private readonly IGitPlugin _git;
 
     public ResearchExecutor(
         ModelSettings modelSettings,
         AgentSettings agentSettings,
-        FileOperationsPlugin fileOperations,
-        CodeNavigationPlugin codeNavigation,
-        GitPlugin git,
-        ILogger<ResearchExecutor> logger)
-        : base(nameof(ResearchExecutor))
+        ILogger<ResearchExecutor> logger,
+        IFileOperationsPlugin fileOperations,
+        ICodeNavigationPlugin codeNavigation,
+        IGitPlugin git,
+        ExecutorOptions? options = null,
+        bool declareCrossRunShareable = false)
+        : base(nameof(ResearchExecutor), options, declareCrossRunShareable)
     {
-        _settings = agentSettings;
+        _modelSettings = modelSettings;
+        _agentSettings = agentSettings;
         _logger = logger;
-        _agent = CreateAgent(modelSettings, fileOperations, codeNavigation, git);
+        _fileOperations = fileOperations;
+        _codeNavigation = codeNavigation;
+        _git = git;
+        _agent = CreateAgent();
     }
 
     public override async ValueTask<SummaryResult> HandleAsync(
@@ -57,7 +67,7 @@ public sealed class ResearchExecutor : Executor<IntentClassificationResult, Summ
         var thread = _agent.GetNewThread();
         string finalAnswer = "";
 
-        for (int i = 0; i < _settings.MaxIterationsPerStep; i++)
+        for (int i = 0; i < _agentSettings.MaxIterationsPerStep; i++)
         {
             var userInput = i == 0 ? prompt : "Continue your research and answer. End with <DONE> when finished.";
             
@@ -87,36 +97,32 @@ public sealed class ResearchExecutor : Executor<IntentClassificationResult, Summ
         };
     }
 
-    private static AIAgent CreateAgent(
-        ModelSettings modelSettings,
-        FileOperationsPlugin fileOperations,
-        CodeNavigationPlugin codeNavigation,
-        GitPlugin git)
+    private AIAgent CreateAgent()
     {
         var client = new AzureOpenAIClient(
-            new Uri(modelSettings.Endpoint),
-            new AzureKeyCredential(modelSettings.ApiKey));
+            new Uri(_modelSettings.Endpoint),
+            new AzureKeyCredential(_modelSettings.ApiKey));
 
-        var chatClient = client.GetChatClient(modelSettings.Research.Model).AsIChatClient();
+        var chatClient = client.GetChatClient(_modelSettings.Research.Model).AsIChatClient();
 
         // Research agent gets read-only tools
         var tools = new List<AITool>
         {
             // File Operations - read only
-            AIFunctionFactory.Create(fileOperations.ReadFileAsync),
-            AIFunctionFactory.Create(fileOperations.ListDirectoryAsync),
-            AIFunctionFactory.Create(fileOperations.FindFilesAsync),
+            AIFunctionFactory.Create(_fileOperations.ReadFileAsync),
+            AIFunctionFactory.Create(_fileOperations.ListDirectoryAsync),
+            AIFunctionFactory.Create(_fileOperations.FindFilesAsync),
 
             // CodeNavivagtion
-            AIFunctionFactory.Create(codeNavigation.GetWorkspaceOverviewAsync),
-            AIFunctionFactory.Create(codeNavigation.GetDirectoryTreeAsync),
-            AIFunctionFactory.Create(codeNavigation.SearchCodeAsync),
-            AIFunctionFactory.Create(codeNavigation.FindDefinitionsAsync),
+            AIFunctionFactory.Create(_codeNavigation.GetWorkspaceOverviewAsync),
+            AIFunctionFactory.Create(_codeNavigation.GetDirectoryTreeAsync),
+            AIFunctionFactory.Create(_codeNavigation.SearchCodeAsync),
+            AIFunctionFactory.Create(_codeNavigation.FindDefinitionsAsync),
 
             // Git - read only
-            AIFunctionFactory.Create(git.GetStatusAsync),
-            AIFunctionFactory.Create(git.GetDiffAsync),
-            AIFunctionFactory.Create(git.GetCommitHistoryAsync),
+            AIFunctionFactory.Create(_git.GetStatusAsync),
+            AIFunctionFactory.Create(_git.GetDiffAsync),
+            AIFunctionFactory.Create(_git.GetCommitHistoryAsync),
         };
 
         return chatClient.CreateAIAgent(

@@ -16,22 +16,34 @@ namespace CodingAgent.Core.Workflow.Executors;
 public sealed class ImplementationExecutor : Executor<PlanningResult, SummaryResult>
 {
     private readonly AIAgent _agent;
-    private readonly AgentSettings _settings;
+    private readonly ModelSettings _modelSettings;
+    private readonly AgentSettings _agentSettings;
+    private readonly IFileOperationsPlugin _fileOperations;
+    private readonly ICodeNavigationPlugin _codeNavigation;
+    private readonly IGitPlugin _git;
+    private readonly ICommandPlugin _command;
     private readonly ILogger<ImplementationExecutor> _logger;
 
     public ImplementationExecutor(
         ModelSettings modelSettings,
         AgentSettings agentSettings,
-        FileOperationsPlugin fileOperations,
-        CodeNavigationPlugin codeNavigation,
-        GitPlugin git,
-        CommandPlugin command,
-        ILogger<ImplementationExecutor> logger)
-        : base(nameof(ImplementationExecutor))
+        ILogger<ImplementationExecutor> logger,
+        IFileOperationsPlugin fileOperations,
+        ICodeNavigationPlugin codeNavigation,
+        IGitPlugin git,
+        ICommandPlugin command,
+        ExecutorOptions? options = null,
+        bool declareCrossRunShareable = false)
+        : base(nameof(ImplementationExecutor), options, declareCrossRunShareable)
     {
-        _settings = agentSettings;
+        _modelSettings = modelSettings;
+        _agentSettings = agentSettings;
         _logger = logger;
-        _agent = CreateAgent(modelSettings, fileOperations, codeNavigation, git, command);
+        _fileOperations = fileOperations;
+        _codeNavigation = codeNavigation;
+        _git = git;
+        _command = command;
+        _agent = CreateAgent();
     }
 
     public override async ValueTask<SummaryResult> HandleAsync(
@@ -82,7 +94,7 @@ public sealed class ImplementationExecutor : Executor<PlanningResult, SummaryRes
             try
             {
                 bool stepFailed = false;
-                for (int i = 0; i < _settings.MaxIterationsPerStep; i++)
+                for (int i = 0; i < _agentSettings.MaxIterationsPerStep; i++)
                 {
                     var userInput = i == 0 ? prompt : "Continue execution. End with <STEP COMPLETE> when done, or <STEP FAILED> if it fails.";
                     var response = await _agent.RunAsync(userInput, thread, cancellationToken: cancellationToken);
@@ -163,49 +175,44 @@ public sealed class ImplementationExecutor : Executor<PlanningResult, SummaryRes
         return summary;
     }
 
-    private static AIAgent CreateAgent(
-        ModelSettings modelSettings,
-        FileOperationsPlugin fileOperations,
-        CodeNavigationPlugin codeNavigation,
-        GitPlugin git,
-        CommandPlugin command)
+    private AIAgent CreateAgent()
     {
         var client = new AzureOpenAIClient(
-            new Uri(modelSettings.Endpoint),
-            new AzureKeyCredential(modelSettings.ApiKey));
+            new Uri(_modelSettings.Endpoint),
+            new AzureKeyCredential(_modelSettings.ApiKey));
 
-        var chatClient = client.GetChatClient(modelSettings.Execution.Model).AsIChatClient();
+        var chatClient = client.GetChatClient(_modelSettings.Execution.Model).AsIChatClient();
 
         // Execution agent gets all tools
         var tools = new List<AITool>
         {
             // File Operations - all
-            AIFunctionFactory.Create(fileOperations.ReadFileAsync),
-            AIFunctionFactory.Create(fileOperations.WriteFileAsync),
-            AIFunctionFactory.Create(fileOperations.ListDirectoryAsync),
-            AIFunctionFactory.Create(fileOperations.FindFilesAsync),
+            AIFunctionFactory.Create(_fileOperations.ReadFileAsync),
+            AIFunctionFactory.Create(_fileOperations.WriteFileAsync),
+            AIFunctionFactory.Create(_fileOperations.ListDirectoryAsync),
+            AIFunctionFactory.Create(_fileOperations.FindFilesAsync),
 
             // CodeNavivagtion
-            AIFunctionFactory.Create(codeNavigation.GetWorkspaceOverviewAsync),
-            AIFunctionFactory.Create(codeNavigation.GetDirectoryTreeAsync),
-            AIFunctionFactory.Create(codeNavigation.SearchCodeAsync),
-            AIFunctionFactory.Create(codeNavigation.FindDefinitionsAsync),
+            AIFunctionFactory.Create(_codeNavigation.GetWorkspaceOverviewAsync),
+            AIFunctionFactory.Create(_codeNavigation.GetDirectoryTreeAsync),
+            AIFunctionFactory.Create(_codeNavigation.SearchCodeAsync),
+            AIFunctionFactory.Create(_codeNavigation.FindDefinitionsAsync),
 
             // Git - all
-            AIFunctionFactory.Create(git.GetStatusAsync),
-            AIFunctionFactory.Create(git.GetDiffAsync),
-            AIFunctionFactory.Create(git.GetCommitHistoryAsync),
-            AIFunctionFactory.Create(git.StageFilesAsync),
-            AIFunctionFactory.Create(git.CommitAsync),
-            AIFunctionFactory.Create(git.CreateBranchAsync),
-            AIFunctionFactory.Create(git.PushAsync),
+            AIFunctionFactory.Create(_git.GetStatusAsync),
+            AIFunctionFactory.Create(_git.GetDiffAsync),
+            AIFunctionFactory.Create(_git.GetCommitHistoryAsync),
+            AIFunctionFactory.Create(_git.StageFilesAsync),
+            AIFunctionFactory.Create(_git.CommitAsync),
+            AIFunctionFactory.Create(_git.CreateBranchAsync),
+            AIFunctionFactory.Create(_git.PushAsync),
 
             // Command
-            AIFunctionFactory.Create(command.ExecuteCommandAsync),
-            AIFunctionFactory.Create(command.BuildDotnetAsync),
-            AIFunctionFactory.Create(command.TestDotnetAsync),
-            AIFunctionFactory.Create(command.NpmInstallAsync),
-            AIFunctionFactory.Create(command.NpmTestAsync),
+            AIFunctionFactory.Create(_command.ExecuteCommandAsync),
+            AIFunctionFactory.Create(_command.BuildDotnetAsync),
+            AIFunctionFactory.Create(_command.TestDotnetAsync),
+            AIFunctionFactory.Create(_command.NpmInstallAsync),
+            AIFunctionFactory.Create(_command.NpmTestAsync),
         };
 
         return chatClient.CreateAIAgent(

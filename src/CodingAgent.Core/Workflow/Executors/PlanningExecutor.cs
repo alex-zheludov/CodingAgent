@@ -18,19 +18,31 @@ namespace CodingAgent.Core.Workflow.Executors;
 public sealed class PlanningExecutor : Executor<IntentClassificationResult, PlanningResult>
 {
     private readonly AIAgent _agent;
+    private readonly ModelSettings _modelSettings;
     private readonly ILogger<PlanningExecutor> _logger;
+    private readonly IFileOperationsPlugin _fileOperations;
+    private readonly ICodeNavigationPlugin _codeNavigation;
+    private readonly IGitPlugin _git;
+    private readonly ICommandPlugin _command;
 
     public PlanningExecutor(
         ModelSettings modelSettings,
-        FileOperationsPlugin fileOperations,
-        CodeNavigationPlugin codeNavigation,
-        GitPlugin git,
-        CommandPlugin command,
-        ILogger<PlanningExecutor> logger)
-        : base(nameof(PlanningExecutor))
+        ILogger<PlanningExecutor> logger,
+        IFileOperationsPlugin fileOperations,
+        ICodeNavigationPlugin codeNavigation,
+        IGitPlugin git,
+        ICommandPlugin command,
+        ExecutorOptions? options = null,
+        bool declareCrossRunShareable = false)
+        : base(nameof(PlanningExecutor), options, declareCrossRunShareable)
     {
+        _modelSettings = modelSettings;
         _logger = logger;
-        _agent = CreateAgent(modelSettings, fileOperations, codeNavigation, git, command);
+        _fileOperations = fileOperations;
+        _codeNavigation = codeNavigation;
+        _git = git;
+        _command = command;
+        _agent = CreateAgent();
     }
 
     public override async ValueTask<PlanningResult> HandleAsync(
@@ -81,49 +93,44 @@ public sealed class PlanningExecutor : Executor<IntentClassificationResult, Plan
         };
     }
 
-    private static AIAgent CreateAgent(
-        ModelSettings modelSettings,
-        FileOperationsPlugin fileOperations,
-        CodeNavigationPlugin codeNavigation,
-        GitPlugin git,
-        CommandPlugin command)
+    private AIAgent CreateAgent()
     {
         var client = new AzureOpenAIClient(
-            new Uri(modelSettings.Endpoint),
-            new AzureKeyCredential(modelSettings.ApiKey));
+            new Uri(_modelSettings.Endpoint),
+            new AzureKeyCredential(_modelSettings.ApiKey));
 
-        var chatClient = client.GetChatClient(modelSettings.Planning.Model).AsIChatClient();
+        var chatClient = client.GetChatClient(_modelSettings.Planning.Model).AsIChatClient();
 
         // Planning agent gets all tools for analysis
         var tools = new List<AITool>
         {
             // File Operations - all
-            AIFunctionFactory.Create(fileOperations.ReadFileAsync),
-            AIFunctionFactory.Create(fileOperations.WriteFileAsync),
-            AIFunctionFactory.Create(fileOperations.ListDirectoryAsync),
-            AIFunctionFactory.Create(fileOperations.FindFilesAsync),
+            AIFunctionFactory.Create(_fileOperations.ReadFileAsync),
+            AIFunctionFactory.Create(_fileOperations.WriteFileAsync),
+            AIFunctionFactory.Create(_fileOperations.ListDirectoryAsync),
+            AIFunctionFactory.Create(_fileOperations.FindFilesAsync),
 
             // Code Navigation
-            AIFunctionFactory.Create(codeNavigation.GetWorkspaceOverviewAsync),
-            AIFunctionFactory.Create(codeNavigation.GetDirectoryTreeAsync),
-            AIFunctionFactory.Create(codeNavigation.SearchCodeAsync),
-            AIFunctionFactory.Create(codeNavigation.FindDefinitionsAsync),
+            AIFunctionFactory.Create(_codeNavigation.GetWorkspaceOverviewAsync),
+            AIFunctionFactory.Create(_codeNavigation.GetDirectoryTreeAsync),
+            AIFunctionFactory.Create(_codeNavigation.SearchCodeAsync),
+            AIFunctionFactory.Create(_codeNavigation.FindDefinitionsAsync),
 
             // Git - all
-            AIFunctionFactory.Create(git.GetStatusAsync),
-            AIFunctionFactory.Create(git.GetDiffAsync),
-            AIFunctionFactory.Create(git.GetCommitHistoryAsync),
-            AIFunctionFactory.Create(git.StageFilesAsync),
-            AIFunctionFactory.Create(git.CommitAsync),
-            AIFunctionFactory.Create(git.CreateBranchAsync),
-            AIFunctionFactory.Create(git.PushAsync),
+            AIFunctionFactory.Create(_git.GetStatusAsync),
+            AIFunctionFactory.Create(_git.GetDiffAsync),
+            AIFunctionFactory.Create(_git.GetCommitHistoryAsync),
+            AIFunctionFactory.Create(_git.StageFilesAsync),
+            AIFunctionFactory.Create(_git.CommitAsync),
+            AIFunctionFactory.Create(_git.CreateBranchAsync),
+            AIFunctionFactory.Create(_git.PushAsync),
 
             // Command
-            AIFunctionFactory.Create(command.ExecuteCommandAsync),
-            AIFunctionFactory.Create(command.BuildDotnetAsync),
-            AIFunctionFactory.Create(command.TestDotnetAsync),
-            AIFunctionFactory.Create(command.NpmInstallAsync),
-            AIFunctionFactory.Create(command.NpmTestAsync),
+            AIFunctionFactory.Create(_command.ExecuteCommandAsync),
+            AIFunctionFactory.Create(_command.BuildDotnetAsync),
+            AIFunctionFactory.Create(_command.TestDotnetAsync),
+            AIFunctionFactory.Create(_command.NpmInstallAsync),
+            AIFunctionFactory.Create(_command.NpmTestAsync),
         };
 
         return chatClient.CreateAIAgent(

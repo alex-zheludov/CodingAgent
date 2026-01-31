@@ -44,25 +44,29 @@ public static class ServiceCollectionExtensions
         services.AddOptions<SecuritySettings>()
             .BindConfiguration(SecuritySettings.SectionName);
 
-        services.AddSingleton(sp =>
-        {
-            var config = sp.GetRequiredService<IConfiguration>();
-            var modelSettings = new ModelSettings();
-            config.GetSection(ModelSettings.SectionName).Bind(modelSettings);
-            return modelSettings;
-        });
+        services.AddSingleton
+        (sp =>
+            {
+                var config = sp.GetRequiredService<IConfiguration>();
+                var modelSettings = new ModelSettings();
+                config.GetSection(ModelSettings.SectionName).Bind(modelSettings);
+                return modelSettings;
+            }
+        );
 
         services.AddValidatorsFromAssemblyContaining<AzureOpenAISettingsValidator>();
     }
 
     private static void AddCoreServices(IServiceCollection services)
     {
-        services.AddDbContext<SessionDbContext>((serviceProvider, options) =>
-        {
-            var workspaceManager = serviceProvider.GetRequiredService<IWorkspaceManager>();
-            var dbPath = Path.Combine(workspaceManager.GetSessionDataPath(), "session.db");
-            options.UseSqlite($"Data Source={dbPath}");
-        });
+        services.AddDbContext<SessionDbContext>
+        ((serviceProvider, options) =>
+            {
+                var workspaceManager = serviceProvider.GetRequiredService<IWorkspaceManager>();
+                var dbPath = Path.Combine(workspaceManager.GetSessionDataPath(), "session.db");
+                options.UseSqlite($"Data Source={dbPath}");
+            }
+        );
 
         services.AddSingleton<IWorkspaceManager, WorkspaceManager>();
         services.AddSingleton<IGitService, GitService>();
@@ -73,10 +77,10 @@ public static class ServiceCollectionExtensions
 
     private static void AddPlugins(IServiceCollection services)
     {
-        services.AddScoped<FileOperationsPlugin>();
-        services.AddScoped<GitPlugin>();
-        services.AddScoped<CommandPlugin>();
-        services.AddScoped<CodeNavigationPlugin>();
+        services.AddScoped<IFileOperationsPlugin, FileOperationsPlugin>();
+        services.AddScoped<IGitPlugin, GitPlugin>();
+        services.AddScoped<ICommandPlugin, CommandPlugin>();
+        services.AddScoped<ICodeNavigationPlugin, CodeNavigationPlugin>();
     }
 
     private static void AddWorkflows(IServiceCollection services)
