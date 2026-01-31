@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace CodingAgent.Configuration.Validators;
+namespace CodingAgent.Core.Configuration.Validators;
 
 public class GitSettingsValidator : AbstractValidator<GitSettings>
 {

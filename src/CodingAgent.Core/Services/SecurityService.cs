@@ -1,8 +1,7 @@
-using CodingAgent.Configuration;
-using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
+using CodingAgent.Core.Configuration;
 
-namespace CodingAgent.Services;
+namespace CodingAgent.Core.Services;
 
 public interface ISecurityService
 {

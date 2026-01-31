@@ -1,4 +1,4 @@
-namespace CodingAgent.Configuration;
+namespace CodingAgent.Core.Configuration;
 
 public class ModelSettings
 {

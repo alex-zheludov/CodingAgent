@@ -1,5 +1,5 @@
-using CodingAgent.Models.Orchestration;
-using CodingAgent.Services;
+using CodingAgent.Core.Models.Orchestration;
+using CodingAgent.Core.Services;
 
 namespace CodingAgent.Core.Workflow;
 
@@ -9,7 +9,7 @@ namespace CodingAgent.Core.Workflow;
 public sealed class WorkflowInput
 {
     public string Instruction { get; set; } = string.Empty;
-    public WorkspaceContext? WorkspaceContext { get; set; }
+    public WorkspaceContext WorkspaceContext { get; set; } = new();
 }
 
 /// <summary>
@@ -21,7 +21,13 @@ public sealed class IntentClassificationResult
     public double Confidence { get; set; }
     public string Reasoning { get; set; } = string.Empty;
     public string OriginalInstruction { get; set; } = string.Empty;
-    public WorkspaceContext? WorkspaceContext { get; set; }
+    public WorkspaceContext WorkspaceContext { get; set; } = new();
+}
+
+public sealed class ContextDiscoveryResult
+{
+    public string OriginalInstruction { get; set; } = string.Empty;
+    public WorkspaceContext WorkspaceContext { get; set; } = new();
 }
 
 /// <summary>
@@ -31,5 +37,5 @@ public sealed class PlanningResult
 {
     public ExecutionPlan Plan { get; set; } = new();
     public string OriginalTask { get; set; } = string.Empty;
-    public WorkspaceContext? WorkspaceContext { get; set; }
+    public WorkspaceContext WorkspaceContext { get; set; } = new();
 }

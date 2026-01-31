@@ -1,7 +1,7 @@
-using CodingAgent.Configuration;
+using CodingAgent.Core.Configuration;
+using CodingAgent.Core.Extensions;
+using CodingAgent.Core.Services;
 using CodingAgent.Core.Workflow;
-using CodingAgent.Extensions;
-using CodingAgent.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

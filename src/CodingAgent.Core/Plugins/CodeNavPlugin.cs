@@ -1,20 +1,39 @@
-using CodingAgent.Services;
 using System.ComponentModel;
 using System.Text;
 using System.Text.RegularExpressions;
+using CodingAgent.Core.Services;
 
-namespace CodingAgent.Plugins;
+namespace CodingAgent.Core.Plugins;
 
-public class CodeNavPlugin
+public interface ICodeNavigationPlugin
+{
+    Task<string> GetWorkspaceOverviewAsync();
+
+    Task<string> GetDirectoryTreeAsync(
+        [Description("The repository name")] string repositoryName,
+        [Description("Optional: subdirectory path to start from")] string? subdirectory = null,
+        [Description("Optional: maximum depth (default 3)")] int maxDepth = 3);
+
+    Task<string> SearchCodeAsync(
+        [Description("The regex pattern or text to search for")] string searchPattern,
+        [Description("Optional: file pattern to filter (e.g., *.cs)")] string filePattern = "*",
+        [Description("Optional: specific repository name, or all if not specified")] string? repositoryName = null);
+
+    Task<string> FindDefinitionsAsync(
+        [Description("The name of the class, interface, or method to find")] string definitionName,
+        [Description("Optional: specific repository name")] string? repositoryName = null);
+}
+
+public class CodeNavigationPlugin : ICodeNavigationPlugin
 {
     private readonly IWorkspaceManager _workspaceManager;
     private readonly ISecurityService _securityService;
-    private readonly ILogger<CodeNavPlugin> _logger;
+    private readonly ILogger<CodeNavigationPlugin> _logger;
 
-    public CodeNavPlugin(
+    public CodeNavigationPlugin(
         IWorkspaceManager workspaceManager,
         ISecurityService securityService,
-        ILogger<CodeNavPlugin> logger)
+        ILogger<CodeNavigationPlugin> logger)
     {
         _workspaceManager = workspaceManager;
         _securityService = securityService;

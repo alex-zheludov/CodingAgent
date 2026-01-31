@@ -1,7 +1,6 @@
-﻿namespace CodingAgent.Configuration.Validators;
+﻿using FluentValidation;
 
-using FluentValidation;
-using Microsoft.Extensions.Options;
+namespace CodingAgent.Core.Configuration.Validators;
 
 // Credit: https://www.milanjovanovic.tech/blog/options-pattern-validation-in-aspnetcore-with-fluentvalidation
 public class FluentValidateOptions<TOptions>(IServiceProvider serviceProvider, string? name)

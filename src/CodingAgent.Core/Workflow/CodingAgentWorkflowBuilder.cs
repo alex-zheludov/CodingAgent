@@ -1,7 +1,7 @@
-using CodingAgent.Configuration;
+using CodingAgent.Core.Configuration;
+using CodingAgent.Core.Models.Orchestration;
+using CodingAgent.Core.Plugins;
 using CodingAgent.Core.Workflow.Executors;
-using CodingAgent.Models.Orchestration;
-using CodingAgent.Plugins;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.Options;
 
@@ -14,8 +14,8 @@ public class CodingAgentWorkflowBuilder
 {
     private readonly ModelSettings _modelSettings;
     private readonly AgentSettings _agentSettings;
-    private readonly FileOpsPlugin _fileOps;
-    private readonly CodeNavPlugin _codeNav;
+    private readonly FileOperationsPlugin _fileOperations;
+    private readonly CodeNavigationPlugin _codeNavigation;
     private readonly GitPlugin _git;
     private readonly CommandPlugin _command;
     private readonly ILoggerFactory _loggerFactory;
@@ -23,16 +23,16 @@ public class CodingAgentWorkflowBuilder
     public CodingAgentWorkflowBuilder(
         ModelSettings modelSettings,
         IOptions<AgentSettings> agentSettings,
-        FileOpsPlugin fileOps,
-        CodeNavPlugin codeNav,
+        FileOperationsPlugin fileOperations,
+        CodeNavigationPlugin codeNavigation,
         GitPlugin git,
         CommandPlugin command,
         ILoggerFactory loggerFactory)
     {
         _modelSettings = modelSettings;
         _agentSettings = agentSettings.Value;
-        _fileOps = fileOps;
-        _codeNav = codeNav;
+        _fileOperations = fileOperations;
+        _codeNavigation = codeNavigation;
         _git = git;
         _command = command;
         _loggerFactory = loggerFactory;
@@ -48,6 +48,13 @@ public class CodingAgentWorkflowBuilder
     /// </summary>
     public Microsoft.Agents.AI.Workflows.Workflow Build()
     {
+        var contextDiscoveryExecutor = new ContextDiscoveryExecutor(
+            _modelSettings,
+            _loggerFactory.CreateLogger<ContextDiscoveryExecutor>(),
+            _fileOperations,
+            _codeNavigation,
+            _git);
+        
         // Create executors
         var intentClassifier = new IntentClassifierExecutor(
             _modelSettings,
@@ -56,15 +63,15 @@ public class CodingAgentWorkflowBuilder
         var researchExecutor = new ResearchExecutor(
             _modelSettings,
             _agentSettings,
-            _fileOps,
-            _codeNav,
+            _fileOperations,
+            _codeNavigation,
             _git,
             _loggerFactory.CreateLogger<ResearchExecutor>());
 
         var planningExecutor = new PlanningExecutor(
             _modelSettings,
-            _fileOps,
-            _codeNav,
+            _fileOperations,
+            _codeNavigation,
             _git,
             _command,
             _loggerFactory.CreateLogger<PlanningExecutor>());
@@ -72,8 +79,8 @@ public class CodingAgentWorkflowBuilder
         var implementationExecutor = new ImplementationExecutor(
             _modelSettings,
             _agentSettings,
-            _fileOps,
-            _codeNav,
+            _fileOperations,
+            _codeNavigation,
             _git,
             _command,
             _loggerFactory.CreateLogger<ImplementationExecutor>());
@@ -81,7 +88,9 @@ public class CodingAgentWorkflowBuilder
         var simpleResponseExecutor = new SimpleResponseExecutor();
 
         // Build workflow with branching based on intent
-        var builder = new WorkflowBuilder(intentClassifier);
+        var builder = new WorkflowBuilder(contextDiscoveryExecutor);
+
+        builder.AddEdge(contextDiscoveryExecutor, intentClassifier);
 
         // Add switch for intent-based routing
         builder.AddSwitch(intentClassifier, switchBuilder =>

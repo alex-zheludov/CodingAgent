@@ -1,11 +1,31 @@
-using CodingAgent.Services;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
+using CodingAgent.Core.Services;
 
-namespace CodingAgent.Plugins;
+namespace CodingAgent.Core.Plugins;
 
-public class CommandPlugin
+public interface ICommandPlugin
+{
+    Task<string> ExecuteCommandAsync(
+        [Description("The command to execute (must be whitelisted)")] string command,
+        [Description("The repository name to execute in")] string repositoryName,
+        [Description("Optional: timeout in seconds (default 300)")] int timeoutSeconds);
+
+    Task<string> BuildDotnetAsync(
+        [Description("The repository name to build")] string repositoryName);
+
+    Task<string> TestDotnetAsync(
+        [Description("The repository name to test")] string repositoryName);
+
+    Task<string> NpmInstallAsync(
+        [Description("The repository name")] string repositoryName);
+
+    Task<string> NpmTestAsync(
+        [Description("The repository name")] string repositoryName);
+}
+
+public class CommandPlugin : ICommandPlugin
 {
     private readonly ISecurityService _securityService;
     private readonly IWorkspaceManager _workspaceManager;

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace CodingAgent.Data;
+namespace CodingAgent.Core.Data;
 
 public class SessionDbContext : DbContext
 {

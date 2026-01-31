@@ -1,4 +1,4 @@
-using CodingAgent.Models.Orchestration;
+using CodingAgent.Core.Models.Orchestration;
 using Microsoft.Agents.AI.Workflows;
 
 namespace CodingAgent.Core.Workflow.Executors;
@@ -9,7 +9,7 @@ namespace CodingAgent.Core.Workflow.Executors;
 /// </summary>
 public sealed class SimpleResponseExecutor : Executor<IntentClassificationResult, SummaryResult>
 {
-    public SimpleResponseExecutor() : base("SimpleResponseExecutor") { }
+    public SimpleResponseExecutor() : base(nameof(SimpleResponseExecutor)) { }
 
     public override ValueTask<SummaryResult> HandleAsync(
         IntentClassificationResult message,

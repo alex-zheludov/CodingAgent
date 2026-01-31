@@ -1,8 +1,8 @@
-using CodingAgent.Data;
-using CodingAgent.Models;
+using CodingAgent.Core.Data;
+using CodingAgent.Core.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CodingAgent.Services;
+namespace CodingAgent.Core.Services;
 
 public interface ISessionStore
 {

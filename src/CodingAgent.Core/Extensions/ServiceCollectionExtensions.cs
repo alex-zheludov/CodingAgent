@@ -1,16 +1,13 @@
-using CodingAgent.Configuration;
-using CodingAgent.Configuration.Validators;
+using CodingAgent.Core.Configuration;
+using CodingAgent.Core.Configuration.Validators;
+using CodingAgent.Core.Data;
+using CodingAgent.Core.Plugins;
+using CodingAgent.Core.Services;
 using CodingAgent.Core.Workflow;
-using CodingAgent.Data;
-using CodingAgent.Plugins;
-using CodingAgent.Services;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
-namespace CodingAgent.Extensions;
+namespace CodingAgent.Core.Extensions;
 
 public static class ServiceCollectionExtensions
 {
@@ -76,10 +73,10 @@ public static class ServiceCollectionExtensions
 
     private static void AddPlugins(IServiceCollection services)
     {
-        services.AddScoped<FileOpsPlugin>();
+        services.AddScoped<FileOperationsPlugin>();
         services.AddScoped<GitPlugin>();
         services.AddScoped<CommandPlugin>();
-        services.AddScoped<CodeNavPlugin>();
+        services.AddScoped<CodeNavigationPlugin>();
     }
 
     private static void AddWorkflows(IServiceCollection services)

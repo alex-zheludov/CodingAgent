@@ -1,9 +1,9 @@
 using Azure;
 using Azure.AI.OpenAI;
-using CodingAgent.Configuration;
-using CodingAgent.Models.Orchestration;
-using CodingAgent.Plugins;
-using CodingAgent.Services;
+using CodingAgent.Core.Configuration;
+using CodingAgent.Core.Models.Orchestration;
+using CodingAgent.Core.Plugins;
+using CodingAgent.Core.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -22,16 +22,16 @@ public sealed class ImplementationExecutor : Executor<PlanningResult, SummaryRes
     public ImplementationExecutor(
         ModelSettings modelSettings,
         AgentSettings agentSettings,
-        FileOpsPlugin fileOps,
-        CodeNavPlugin codeNav,
+        FileOperationsPlugin fileOperations,
+        CodeNavigationPlugin codeNavigation,
         GitPlugin git,
         CommandPlugin command,
         ILogger<ImplementationExecutor> logger)
-        : base("ImplementationExecutor")
+        : base(nameof(ImplementationExecutor))
     {
         _settings = agentSettings;
         _logger = logger;
-        _agent = CreateAgent(modelSettings, fileOps, codeNav, git, command);
+        _agent = CreateAgent(modelSettings, fileOperations, codeNavigation, git, command);
     }
 
     public override async ValueTask<SummaryResult> HandleAsync(
@@ -40,7 +40,6 @@ public sealed class ImplementationExecutor : Executor<PlanningResult, SummaryRes
         CancellationToken cancellationToken = default)
     {
         var results = new List<StepResult>();
-        var contextInfo = BuildContextInfo(message.WorkspaceContext);
 
         foreach (var step in message.Plan.Steps.OrderBy(s => s.StepId))
         {
@@ -60,7 +59,7 @@ public sealed class ImplementationExecutor : Executor<PlanningResult, SummaryRes
                 Step: {step.Description}
                 Expected outcome: {step.ExpectedOutcome}
 
-                {contextInfo}
+                {message.WorkspaceContext?.DiscoveredContext}
 
                 Execute: {step.Action}
 
@@ -166,8 +165,8 @@ public sealed class ImplementationExecutor : Executor<PlanningResult, SummaryRes
 
     private static AIAgent CreateAgent(
         ModelSettings modelSettings,
-        FileOpsPlugin fileOps,
-        CodeNavPlugin codeNav,
+        FileOperationsPlugin fileOperations,
+        CodeNavigationPlugin codeNavigation,
         GitPlugin git,
         CommandPlugin command)
     {
@@ -180,17 +179,17 @@ public sealed class ImplementationExecutor : Executor<PlanningResult, SummaryRes
         // Execution agent gets all tools
         var tools = new List<AITool>
         {
-            // FileOps - all
-            AIFunctionFactory.Create(fileOps.ReadFileAsync),
-            AIFunctionFactory.Create(fileOps.WriteFileAsync),
-            AIFunctionFactory.Create(fileOps.ListDirectoryAsync),
-            AIFunctionFactory.Create(fileOps.FindFilesAsync),
+            // File Operations - all
+            AIFunctionFactory.Create(fileOperations.ReadFileAsync),
+            AIFunctionFactory.Create(fileOperations.WriteFileAsync),
+            AIFunctionFactory.Create(fileOperations.ListDirectoryAsync),
+            AIFunctionFactory.Create(fileOperations.FindFilesAsync),
 
-            // CodeNav
-            AIFunctionFactory.Create(codeNav.GetWorkspaceOverviewAsync),
-            AIFunctionFactory.Create(codeNav.GetDirectoryTreeAsync),
-            AIFunctionFactory.Create(codeNav.SearchCodeAsync),
-            AIFunctionFactory.Create(codeNav.FindDefinitionsAsync),
+            // CodeNavivagtion
+            AIFunctionFactory.Create(codeNavigation.GetWorkspaceOverviewAsync),
+            AIFunctionFactory.Create(codeNavigation.GetDirectoryTreeAsync),
+            AIFunctionFactory.Create(codeNavigation.SearchCodeAsync),
+            AIFunctionFactory.Create(codeNavigation.FindDefinitionsAsync),
 
             // Git - all
             AIFunctionFactory.Create(git.GetStatusAsync),
@@ -212,21 +211,5 @@ public sealed class ImplementationExecutor : Executor<PlanningResult, SummaryRes
         return chatClient.CreateAIAgent(
             instructions: "You are an implementation agent that implements coding tasks step by step.",
             tools: tools);
-    }
-
-    private static string BuildContextInfo(WorkspaceContext? workspaceContext)
-    {
-        if (workspaceContext == null) return "No workspace context available.";
-
-        var lines = new List<string> { "Available Repositories:" };
-        foreach (var (repoName, repoInfo) in workspaceContext.Repositories)
-        {
-            lines.Add($"  - {repoName}: {repoInfo.TotalFiles} files");
-            if (repoInfo.KeyFiles.Count > 0)
-            {
-                lines.Add($"    Key files: {string.Join(", ", repoInfo.KeyFiles.Take(5))}");
-            }
-        }
-        return string.Join("\n", lines);
     }
 }

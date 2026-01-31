@@ -2,8 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Azure;
 using Azure.AI.OpenAI;
-using CodingAgent.Configuration;
-using CodingAgent.Models.Orchestration;
+using CodingAgent.Core.Configuration;
+using CodingAgent.Core.Models.Orchestration;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -14,20 +14,20 @@ namespace CodingAgent.Core.Workflow.Executors;
 /// Executor that classifies user intent to determine workflow routing.
 /// No tools needed - pure LLM classification.
 /// </summary>
-public sealed class IntentClassifierExecutor : Executor<WorkflowInput, IntentClassificationResult>
+public sealed class IntentClassifierExecutor : Executor<ContextDiscoveryResult, IntentClassificationResult>
 {
     private readonly AIAgent _agent;
     private readonly ILogger<IntentClassifierExecutor> _logger;
 
     public IntentClassifierExecutor(ModelSettings modelSettings, ILogger<IntentClassifierExecutor> logger)
-        : base("IntentClassifierExecutor")
+        : base(nameof(IntentClassifierExecutor))
     {
         _logger = logger;
         _agent = CreateAgent(modelSettings);
     }
 
     public override async ValueTask<IntentClassificationResult> HandleAsync(
-        WorkflowInput message,
+        ContextDiscoveryResult message,
         IWorkflowContext context,
         CancellationToken cancellationToken = default)
     {
@@ -41,7 +41,7 @@ public sealed class IntentClassifierExecutor : Executor<WorkflowInput, IntentCla
             Respond ONLY with valid JSON:
             {"intent": "QUESTION" | "TASK" | "GREETING" | "UNCLEAR", "confidence": 0.0-1.0, "reasoning": "brief explanation"}
 
-            User Request: {{message.Instruction}}
+            User Request: {{message.OriginalInstruction}}
             """;
 
         var response = await _agent.RunAsync(prompt, cancellationToken: cancellationToken);
@@ -63,7 +63,7 @@ public sealed class IntentClassifierExecutor : Executor<WorkflowInput, IntentCla
                 Intent = intentResult.Intent,
                 Confidence = intentResult.Confidence,
                 Reasoning = intentResult.Reasoning,
-                OriginalInstruction = message.Instruction,
+                OriginalInstruction = message.OriginalInstruction,
                 WorkspaceContext = message.WorkspaceContext
             };
         }
@@ -75,7 +75,7 @@ public sealed class IntentClassifierExecutor : Executor<WorkflowInput, IntentCla
                 Intent = IntentType.Unclear,
                 Confidence = 0.5,
                 Reasoning = "Parse error",
-                OriginalInstruction = message.Instruction,
+                OriginalInstruction = message.OriginalInstruction,
                 WorkspaceContext = message.WorkspaceContext
             };
         }

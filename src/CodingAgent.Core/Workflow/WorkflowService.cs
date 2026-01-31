@@ -1,5 +1,5 @@
-using CodingAgent.Models.Orchestration;
-using CodingAgent.Services;
+using CodingAgent.Core.Models.Orchestration;
+using CodingAgent.Core.Services;
 using Microsoft.Agents.AI.Workflows;
 
 namespace CodingAgent.Core.Workflow;

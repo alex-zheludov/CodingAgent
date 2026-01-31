@@ -1,4 +1,4 @@
-namespace CodingAgent.Services;
+namespace CodingAgent.Core.Services;
 
 public interface IInitializationService
 {

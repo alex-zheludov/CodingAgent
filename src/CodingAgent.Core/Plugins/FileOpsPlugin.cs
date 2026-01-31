@@ -1,18 +1,35 @@
-using CodingAgent.Services;
 using System.ComponentModel;
+using CodingAgent.Core.Services;
 
-namespace CodingAgent.Plugins;
+namespace CodingAgent.Core.Plugins;
 
-public class FileOpsPlugin
+public interface IFileOperationsPlugin
+{
+    Task<string> ReadFileAsync(
+        [Description("The path to the file relative to workspace root")] string filePath);
+
+    Task<string> WriteFileAsync(
+        [Description("The path to the file relative to workspace root")] string filePath,
+        [Description("The content to write to the file")] string content);
+
+    Task<string> ListDirectoryAsync(
+        [Description("The directory path relative to workspace root")] string directoryPath,
+        [Description("File pattern to match (e.g., *.cs)")] string pattern = "*");
+
+    Task<string> FindFilesAsync(
+        [Description("File name pattern to search for (e.g., *.cs, Program.cs)")] string pattern);
+}
+
+public class FileOperationsPlugin : IFileOperationsPlugin
 {
     private readonly IWorkspaceManager _workspaceManager;
     private readonly ISecurityService _securityService;
-    private readonly ILogger<FileOpsPlugin> _logger;
+    private readonly ILogger<FileOperationsPlugin> _logger;
 
-    public FileOpsPlugin(
+    public FileOperationsPlugin(
         IWorkspaceManager workspaceManager,
         ISecurityService securityService,
-        ILogger<FileOpsPlugin> logger)
+        ILogger<FileOperationsPlugin> logger)
     {
         _workspaceManager = workspaceManager;
         _securityService = securityService;

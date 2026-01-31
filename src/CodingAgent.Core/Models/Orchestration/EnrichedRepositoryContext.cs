@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace CodingAgent.Models.Orchestration;
+namespace CodingAgent.Core.Models.Orchestration;
 
 /// <summary>
 /// Enriched repository context with analyzed project information

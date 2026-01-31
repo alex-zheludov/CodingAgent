@@ -1,9 +1,8 @@
-using CodingAgent.Configuration;
-using LibGit2Sharp;
-using Microsoft.Extensions.Options;
 using System.Text;
+using CodingAgent.Core.Configuration;
+using LibGit2Sharp;
 
-namespace CodingAgent.Services;
+namespace CodingAgent.Core.Services;
 
 public interface IGitService
 {

@@ -1,7 +1,6 @@
-﻿using CodingAgent.Configuration.Validators;
-using Microsoft.Extensions.Options;
+﻿using CodingAgent.Core.Configuration.Validators;
 
-namespace CodingAgent.Extensions;
+namespace CodingAgent.Core.Extensions;
 
 public static class FluentValidatorForOptions
 {

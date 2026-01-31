@@ -1,6 +1,6 @@
-using CodingAgent.Services;
+using CodingAgent.Core.Services;
 
-namespace CodingAgent.Models.Orchestration;
+namespace CodingAgent.Core.Models.Orchestration;
 
 public class OrchestrationState
 {

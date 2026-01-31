@@ -1,7 +1,6 @@
-using CodingAgent.Configuration;
-using Microsoft.Extensions.Options;
+using CodingAgent.Core.Configuration;
 
-namespace CodingAgent.Services;
+namespace CodingAgent.Core.Services;
 
 public interface IWorkspaceManager
 {
@@ -18,6 +17,7 @@ public class WorkspaceContext
 {
     public Dictionary<string, RepositoryInfo> Repositories { get; set; } = new();
     public DateTime ScanTime { get; set; }
+    public string DiscoveredContext { get; set; } = string.Empty;
 }
 
 public class RepositoryInfo

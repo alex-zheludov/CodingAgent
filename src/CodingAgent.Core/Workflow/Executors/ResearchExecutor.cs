@@ -1,9 +1,9 @@
 using Azure;
 using Azure.AI.OpenAI;
-using CodingAgent.Configuration;
-using CodingAgent.Models.Orchestration;
-using CodingAgent.Plugins;
-using CodingAgent.Services;
+using CodingAgent.Core.Configuration;
+using CodingAgent.Core.Models.Orchestration;
+using CodingAgent.Core.Plugins;
+using CodingAgent.Core.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -22,15 +22,15 @@ public sealed class ResearchExecutor : Executor<IntentClassificationResult, Summ
     public ResearchExecutor(
         ModelSettings modelSettings,
         AgentSettings agentSettings,
-        FileOpsPlugin fileOps,
-        CodeNavPlugin codeNav,
+        FileOperationsPlugin fileOperations,
+        CodeNavigationPlugin codeNavigation,
         GitPlugin git,
         ILogger<ResearchExecutor> logger)
-        : base("ResearchExecutor")
+        : base(nameof(ResearchExecutor))
     {
         _settings = agentSettings;
         _logger = logger;
-        _agent = CreateAgent(modelSettings, fileOps, codeNav, git);
+        _agent = CreateAgent(modelSettings, fileOperations, codeNavigation, git);
     }
 
     public override async ValueTask<SummaryResult> HandleAsync(
@@ -38,12 +38,10 @@ public sealed class ResearchExecutor : Executor<IntentClassificationResult, Summ
         IWorkflowContext context,
         CancellationToken cancellationToken = default)
     {
-        var contextInfo = BuildContextInfo(message.WorkspaceContext);
-        
         var prompt = $$"""
             You are a code research agent. Answer questions about the codebase using available tools.
 
-            {{contextInfo}}
+            {{message.WorkspaceContext.DiscoveredContext}}
 
             Use tools to:
             - Read files with ReadFileAsync
@@ -91,8 +89,8 @@ public sealed class ResearchExecutor : Executor<IntentClassificationResult, Summ
 
     private static AIAgent CreateAgent(
         ModelSettings modelSettings,
-        FileOpsPlugin fileOps,
-        CodeNavPlugin codeNav,
+        FileOperationsPlugin fileOperations,
+        CodeNavigationPlugin codeNavigation,
         GitPlugin git)
     {
         var client = new AzureOpenAIClient(
@@ -104,16 +102,16 @@ public sealed class ResearchExecutor : Executor<IntentClassificationResult, Summ
         // Research agent gets read-only tools
         var tools = new List<AITool>
         {
-            // FileOps - read only
-            AIFunctionFactory.Create(fileOps.ReadFileAsync),
-            AIFunctionFactory.Create(fileOps.ListDirectoryAsync),
-            AIFunctionFactory.Create(fileOps.FindFilesAsync),
+            // File Operations - read only
+            AIFunctionFactory.Create(fileOperations.ReadFileAsync),
+            AIFunctionFactory.Create(fileOperations.ListDirectoryAsync),
+            AIFunctionFactory.Create(fileOperations.FindFilesAsync),
 
-            // CodeNav
-            AIFunctionFactory.Create(codeNav.GetWorkspaceOverviewAsync),
-            AIFunctionFactory.Create(codeNav.GetDirectoryTreeAsync),
-            AIFunctionFactory.Create(codeNav.SearchCodeAsync),
-            AIFunctionFactory.Create(codeNav.FindDefinitionsAsync),
+            // CodeNavivagtion
+            AIFunctionFactory.Create(codeNavigation.GetWorkspaceOverviewAsync),
+            AIFunctionFactory.Create(codeNavigation.GetDirectoryTreeAsync),
+            AIFunctionFactory.Create(codeNavigation.SearchCodeAsync),
+            AIFunctionFactory.Create(codeNavigation.FindDefinitionsAsync),
 
             // Git - read only
             AIFunctionFactory.Create(git.GetStatusAsync),
@@ -124,21 +122,5 @@ public sealed class ResearchExecutor : Executor<IntentClassificationResult, Summ
         return chatClient.CreateAIAgent(
             instructions: "You are a code research agent. Use available tools to answer questions about the codebase.",
             tools: tools);
-    }
-
-    private static string BuildContextInfo(WorkspaceContext? workspaceContext)
-    {
-        if (workspaceContext == null) return "No workspace context available.";
-
-        var lines = new List<string> { "Available Repositories:" };
-        foreach (var (repoName, repoInfo) in workspaceContext.Repositories)
-        {
-            lines.Add($"  - {repoName}: {repoInfo.TotalFiles} files");
-            if (repoInfo.KeyFiles.Count > 0)
-            {
-                lines.Add($"    Key files: {string.Join(", ", repoInfo.KeyFiles.Take(5))}");
-            }
-        }
-        return string.Join("\n", lines);
     }
 }

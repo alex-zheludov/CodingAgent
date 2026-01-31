@@ -1,10 +1,39 @@
-using CodingAgent.Services;
 using System.ComponentModel;
 using System.Text;
+using CodingAgent.Core.Services;
 
-namespace CodingAgent.Plugins;
+namespace CodingAgent.Core.Plugins;
 
-public class GitPlugin
+public interface IGitPlugin
+{
+    Task<string> GetStatusAsync(
+        [Description("The name of the repository")] string repositoryName);
+
+    Task<string> GetDiffAsync(
+        [Description("The name of the repository")] string repositoryName,
+        [Description("Optional: specific file path to show diff for")] string? filePath = null);
+
+    Task<string> StageFilesAsync(
+        [Description("The name of the repository")] string repositoryName,
+        [Description("Comma-separated list of file paths to stage")] string filePaths);
+
+    Task<string> CommitAsync(
+        [Description("The name of the repository")] string repositoryName,
+        [Description("The commit message")] string message);
+
+    Task<string> CreateBranchAsync(
+        [Description("The name of the repository")] string repositoryName,
+        [Description("The branch name (prefix will be added automatically)")] string branchName);
+
+    Task<string> PushAsync(
+        [Description("The name of the repository")] string repositoryName);
+
+    Task<string> GetCommitHistoryAsync(
+        [Description("The name of the repository")] string repositoryName,
+        [Description("Number of commits to retrieve (default 10)")] int count = 10);
+}
+
+public class GitPlugin : IGitPlugin
 {
     private readonly IGitService _gitService;
     private readonly ILogger<GitPlugin> _logger;

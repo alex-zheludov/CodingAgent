@@ -1,10 +1,10 @@
 using System.Text.Json;
 using Azure;
 using Azure.AI.OpenAI;
-using CodingAgent.Configuration;
-using CodingAgent.Models.Orchestration;
-using CodingAgent.Plugins;
-using CodingAgent.Services;
+using CodingAgent.Core.Configuration;
+using CodingAgent.Core.Models.Orchestration;
+using CodingAgent.Core.Plugins;
+using CodingAgent.Core.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -22,15 +22,15 @@ public sealed class PlanningExecutor : Executor<IntentClassificationResult, Plan
 
     public PlanningExecutor(
         ModelSettings modelSettings,
-        FileOpsPlugin fileOps,
-        CodeNavPlugin codeNav,
+        FileOperationsPlugin fileOperations,
+        CodeNavigationPlugin codeNavigation,
         GitPlugin git,
         CommandPlugin command,
         ILogger<PlanningExecutor> logger)
-        : base("PlanningExecutor")
+        : base(nameof(PlanningExecutor))
     {
         _logger = logger;
-        _agent = CreateAgent(modelSettings, fileOps, codeNav, git, command);
+        _agent = CreateAgent(modelSettings, fileOperations, codeNavigation, git, command);
     }
 
     public override async ValueTask<PlanningResult> HandleAsync(
@@ -38,14 +38,12 @@ public sealed class PlanningExecutor : Executor<IntentClassificationResult, Plan
         IWorkflowContext context,
         CancellationToken cancellationToken = default)
     {
-        var contextInfo = BuildContextInfo(message.WorkspaceContext);
-
         var prompt = $$"""
             Create an execution plan for this task:
             {{message.OriginalInstruction}}
 
             Context:
-            {{contextInfo}}
+            {{message.WorkspaceContext.DiscoveredContext}}
 
             Respond ONLY with valid JSON:
             {
@@ -85,8 +83,8 @@ public sealed class PlanningExecutor : Executor<IntentClassificationResult, Plan
 
     private static AIAgent CreateAgent(
         ModelSettings modelSettings,
-        FileOpsPlugin fileOps,
-        CodeNavPlugin codeNav,
+        FileOperationsPlugin fileOperations,
+        CodeNavigationPlugin codeNavigation,
         GitPlugin git,
         CommandPlugin command)
     {
@@ -99,17 +97,17 @@ public sealed class PlanningExecutor : Executor<IntentClassificationResult, Plan
         // Planning agent gets all tools for analysis
         var tools = new List<AITool>
         {
-            // FileOps - all
-            AIFunctionFactory.Create(fileOps.ReadFileAsync),
-            AIFunctionFactory.Create(fileOps.WriteFileAsync),
-            AIFunctionFactory.Create(fileOps.ListDirectoryAsync),
-            AIFunctionFactory.Create(fileOps.FindFilesAsync),
+            // File Operations - all
+            AIFunctionFactory.Create(fileOperations.ReadFileAsync),
+            AIFunctionFactory.Create(fileOperations.WriteFileAsync),
+            AIFunctionFactory.Create(fileOperations.ListDirectoryAsync),
+            AIFunctionFactory.Create(fileOperations.FindFilesAsync),
 
-            // CodeNav
-            AIFunctionFactory.Create(codeNav.GetWorkspaceOverviewAsync),
-            AIFunctionFactory.Create(codeNav.GetDirectoryTreeAsync),
-            AIFunctionFactory.Create(codeNav.SearchCodeAsync),
-            AIFunctionFactory.Create(codeNav.FindDefinitionsAsync),
+            // Code Navigation
+            AIFunctionFactory.Create(codeNavigation.GetWorkspaceOverviewAsync),
+            AIFunctionFactory.Create(codeNavigation.GetDirectoryTreeAsync),
+            AIFunctionFactory.Create(codeNavigation.SearchCodeAsync),
+            AIFunctionFactory.Create(codeNavigation.FindDefinitionsAsync),
 
             // Git - all
             AIFunctionFactory.Create(git.GetStatusAsync),
@@ -144,22 +142,6 @@ public sealed class PlanningExecutor : Executor<IntentClassificationResult, Plan
             },
             Confidence = 0.3
         };
-    }
-
-    private static string BuildContextInfo(WorkspaceContext? workspaceContext)
-    {
-        if (workspaceContext == null) return "No workspace context available.";
-
-        var lines = new List<string> { "Available Repositories:" };
-        foreach (var (repoName, repoInfo) in workspaceContext.Repositories)
-        {
-            lines.Add($"  - {repoName}: {repoInfo.TotalFiles} files");
-            if (repoInfo.KeyFiles.Count > 0)
-            {
-                lines.Add($"    Key files: {string.Join(", ", repoInfo.KeyFiles.Take(5))}");
-            }
-        }
-        return string.Join("\n", lines);
     }
 
     private static string StripMarkdownFences(string content)

@@ -1,4 +1,4 @@
-namespace CodingAgent.Models;
+namespace CodingAgent.Core.Models;
 
 public enum AgentState
 {
